@@ -1,0 +1,55 @@
+name: lumina_plugin_openxr
+description: "Khronos OpenXR plugin for Lumina Studio: cross-platform XR runtime management, native OpenXR loader bridge, HMD and controller tracking components, and stereoscopic rendering."
+version: 0.1.0
+publish_to: none
+repository: https://github.com/LuminaGame/openxr
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  lumina_editor_api:
+    git:
+      url: https://github.com/LuminaGame/lumina.git
+      path: lumina_editor_api
+      ref: 1da1433f0d7478a8591a4356f793bd68a82a5084
+  lumina:
+    git:
+      url: https://github.com/LuminaGame/lumina.git
+      path: lumina
+      ref: 1da1433f0d7478a8591a4356f793bd68a82a5084
+  flutter_filament:
+    git:
+      url: https://github.com/LuminaGame/lumina.git
+      path: flutter_filament
+      ref: 1da1433f0d7478a8591a4356f793bd68a82a5084
+  shadcn_flutter: 0.0.55
+  ffi: ^2.1.2
+  vector_math: ^2.1.4
+  meta: ^1.15.0
+  logging: ^1.2.0
+  hooks: ^1.0.0
+  code_assets: ^1.0.0
+  native_toolchain_c: ^0.17.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  test: ^1.24.0
+
+hooks:
+  user_defines:
+    flutter_filament:
+      filament_dir: filament
+    flutter_assimp:
+      filament_dir: filament
+      libcxx_dir: ../lumina/flutter_filament/third_party/libcxx
+    flutter_riglogic:
+      libcxx_dir: ../lumina/flutter_filament/third_party/libcxx
+      riglogic_lib_dir: ../tools/flutter_riglogic/third_party/openriglogic/lib
+
+flutter:

@@ -1,0 +1,22 @@
+{
+  "name": "lumina_plugin_openxr",
+  "friendly_name": "OpenXR Support",
+  "version": "0.1.0",
+  "description": "Khronos OpenXR runtime management, HMD and controller tracking components, and stereoscopic rendering for Lumina Studio.",
+  "category": "Virtual Reality",
+  "license": "MIT",
+  "changelog": "CHANGELOG.md",
+  "authors": [
+    "Lumina"
+  ],
+  "engine_version": ">=0.0.1 <1.0.0",
+  "can_contain_content": false,
+  "modules": [
+    {
+      "name": "lumina_plugin_openxr",
+      "type": "editor",
+      "entry_library": "lib/lumina_plugin_openxr.dart",
+      "registration_class": "LuminaPluginOpenxrPlugin"
+    }
+  ]
+}
