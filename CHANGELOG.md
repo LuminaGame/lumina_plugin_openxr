@@ -12,4 +12,4 @@ All notable changes to `lumina_plugin_openxr` will be documented in this file.
 - `LuminaXRHMDComponent` for head tracking, IPD calculation, and stereo eye offset generation.
 - `LuminaXRControllerComponent` handling left and right hand motion controllers, grip/aim poses, buttons, and haptics.
 - `OpenXrFilamentBridge` connecting OpenXR asymmetric perspective projections to Filament's native stereoscopic rendering pipeline (`StereoscopicType.instanced` and `StereoscopicType.multiview`).
-- Lumina Studio editor integration: status bar indicator badge, VR Preview toggle, XR settings view, and MCP diagnostic tool `openxr.get_status`.
+- Lumina Studio editor integration: status bar indicator badge, VR Preview toggle, XR settings view, and MCP diagnostic tool `lumina_plugin_openxr.get_status`.

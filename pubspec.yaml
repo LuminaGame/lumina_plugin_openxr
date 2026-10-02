@@ -2,7 +2,7 @@ name: lumina_plugin_openxr
 description: "Khronos OpenXR plugin for Lumina Studio: cross-platform XR runtime management, native OpenXR loader bridge, HMD and controller tracking components, and stereoscopic rendering."
 version: 0.1.0
 publish_to: none
-repository: https://github.com/LuminaGame/openxr
+repository: https://github.com/LuminaGame/lumina_plugin_openxr
 
 environment:
   sdk: ^3.12.0
