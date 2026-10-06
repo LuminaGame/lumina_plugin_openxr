@@ -169,6 +169,10 @@ Ardından `flutter pub get`. Her şey tek kütüphaneden içe aktarılır:
 import 'package:lumina_plugin_openxr/lumina_plugin_openxr.dart';
 ```
 
+Yalnızca düz XR türlerine (`LuminaXRHand`, `OpenXrActionType`, aksiyon ve girdi durumu sınıfları,
+`OpenXrInteractionProfiles`) ihtiyaç duyan kod bunun yerine `package:lumina_plugin_openxr/xr_types.dart`'ı içe
+aktarabilir: ne `dart:ffi`'ye ne de OpenXR köprüsüne ulaşır. Ana kütüphane aynı türleri dışa aktarır.
+
 ### Yerel köprü
 
 `hook/build.dart`, ilk `flutter run` / `flutter test` / `flutter build`'de `src/openxr_bridge_c.cpp`'yi
@@ -292,8 +296,8 @@ bir çökme veya kilitlenme editörü düşüremez.
 
 | Nerede | Orada ne çalışır |
 |---|---|
-| Eklenti süreci (`LuminaPluginOpenxrProcess`, modülün `process_class`'ı) | `PluginProcessAdapter` üzerinden değiştirilmemiş `LuminaPluginOpenxrPlugin`: OpenXR yükleyici köprüsü (`dart:ffi`), `OpenXrBindings`, oturum, tüm menü ve durum çubuğu komutları, `get_status` MCP aracı, OpenXR panelinin olayları (`OpenXrStatusView`), Output Log satırları. `LuminaPluginCrashReporter` ile bildirilen yakalanmış yerel hatalar eklentinin adıyla editör günlüğüne gider. |
-| Editör (`LuminaPluginOpenxrShell`, modülün `registration_class`'ı) | OpenXR'dan hiçbir şey: kabuk hiçbir katkı kaydetmez, köprüyü hiç açmaz, yalnızca eklentinin süreç kanalını tutar (`channel.call('status')` `get_status` JSON'unu döner). Editör menü öğelerini, durum çubuğu düğmesini (durumu değiştikçe gelir) ve OpenXR panelini sürecin gönderdiklerinden çizer. |
+| Eklenti süreci (`LuminaPluginOpenxrProcess`, modülün `process_class`'ı) | `PluginProcessAdapter` üzerinden değiştirilmemiş `LuminaPluginOpenxrPlugin`: OpenXR yükleyici köprüsü (`dart:ffi`), `OpenXrBindings`, oturum, tüm menü ve durum çubuğu komutları, `get_status` MCP aracı, OpenXR panelinin olayları (`OpenXrStatusView`), Output Log satırları. `LuminaPluginCrashReporter` ile bildirilen yakalanmış yerel hatalar eklentinin adıyla editör günlüğüne gider (eklenti süreci çalışma zamanı iletir). |
+| Editör | OpenXR'dan hiçbir şey: modül yalnızca bir `process_class` adlandırır, `registration_class` yoktur; eklentinin editör içinde bir parçası olmaz ve editör köprüyü hiç açmaz. Editör menü öğelerini, durum çubuğu düğmesini (durumu değiştikçe gelir) ve OpenXR panelini sürecin gönderdiklerinden çizer. Duruma ihtiyaç duyan editör kodu eklentinin süreç kanalını çağırır: `call('status')` `get_status` JSON'unu döner. |
 
 Süreç durduğunda (bir çökme ya da art arda üç sağlık denetimine yanıt vermemesi) editör onu birkaç kez yeniden
 başlatır, sonra eklentiyi durmuş olarak işaretler: menü öğeleri grileşir, OpenXR paneli durumu bir **Restart**
@@ -323,8 +327,8 @@ gelir, baş ve kontrolcülerin makul pozları olur, girdiler ve titreşimler tes
 ```
 lib/
   lumina_plugin_openxr.dart          genel kütüphane (aşağıdakilerin hepsini dışa aktarır)
+  xr_types.dart                      yerel köprü olmadan düz XR türleri (LuminaXRHand, aksiyon durumu)
   src/lumina_plugin_openxr_plugin.dart   LuminaEditorPlugin: menüler, durum çubuğu düğmesi, MCP aracı
-  src/lumina_plugin_openxr_shell.dart    editör tarafındaki kabuk (registration_class), OpenXR kodu yok
   src/process/    LuminaPluginOpenxrProcess (process_class), OpenXrStatusView (bildirimsel OpenXR paneli)
   src/ffi/        OpenXrBindings (yerel köprü + benzetim anahtarı), OpenXR türleri/yapıları, SimulatedOpenXrBackend
   src/session/    OpenXrSession, OpenXrReferenceSpace, OpenXrSpaceConverter
@@ -374,6 +378,7 @@ flutter test test/openxr_stereo_render_test.dart
 flutter test test/xr_components_test.dart
 flutter test test/openxr_editor_integration_test.dart
 flutter test test/openxr_plugin_process_test.dart
+flutter test test/xr_types_library_test.dart
 flutter analyze
 ```
 

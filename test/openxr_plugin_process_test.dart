@@ -219,8 +219,9 @@ void main() {
     LuminaPluginCrashReporter.reportCrash(StateError('xrCreateInstance failed'), StackTrace.current,
         plugin: _name, context: 'initialize: openxr_bridge_initialize');
     final log = await host.next(PluginMethods.log, where: (a) => a['level'] == 'error');
+    expect(log['source'], _name);
     expect(log['message'],
-        startsWith('$_name error while initialize: openxr_bridge_initialize: Bad state: xrCreateInstance failed'));
+        startsWith('crash report (while initialize: openxr_bridge_initialize): Bad state: xrCreateInstance failed'));
 
     await shutdown();
     expect(LuminaPluginCrashReporter.hasHandler, isFalse, reason: 'the handler is removed on shutdown');

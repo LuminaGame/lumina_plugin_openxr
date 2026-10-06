@@ -17,7 +17,6 @@
       "name": "lumina_plugin_openxr",
       "type": "editor",
       "entry_library": "lib/lumina_plugin_openxr.dart",
-      "registration_class": "LuminaPluginOpenxrShell",
       "process_class": "LuminaPluginOpenxrProcess"
     }
   ]

@@ -17,30 +17,20 @@ import 'openxr_status_view.dart';
 /// which the menu commands open, and keeps it current when the runtime,
 /// the settings or the VR preview change.
 ///
-/// Shell calls (`PluginProcessChannel.call`): `status` answers the same
-/// JSON as the `get_status` MCP tool.
+/// Channel calls (`PluginProcessChannel.call`): `status` answers the same
+/// JSON as the `get_status` MCP tool. The plugin has no in-editor shell
+/// (its module names no `registration_class`). Caught native errors the
+/// plugin reports through `LuminaPluginCrashReporter` reach the editor's log
+/// through the plugin process runtime.
 class LuminaPluginOpenxrProcess extends PluginProcessAdapter {
   LuminaPluginOpenxrProcess([LuminaPluginOpenxrPlugin? plugin]) : super(plugin ?? LuminaPluginOpenxrPlugin());
 
   LuminaPluginOpenxrPlugin get openxr => plugin as LuminaPluginOpenxrPlugin;
 
-  PluginProcessContext? _process;
   void Function()? _detach;
-  bool _ownsCrashHandler = false;
 
   @override
   FutureOr<void> register(PluginProcessContext context) {
-    _process = context;
-    // In its own process nothing reports the plugin's caught native errors
-    // yet: send them to the editor's log. Inside the editor (the debugging
-    // override) the editor's crash reporter stays in charge.
-    if (!LuminaPluginCrashReporter.hasHandler) {
-      _ownsCrashHandler = true;
-      LuminaPluginCrashReporter.setHandler((error, stack, {required plugin, context}) {
-        final where = context == null || context.isEmpty ? '' : ' while $context';
-        _process?.log('$plugin error$where: $error${stack == null ? '' : '\n$stack'}', level: 'error');
-      });
-    }
     super.register(context);
     context.registerViewPanel(OpenXrStatusView.panel(openxr));
     context.handle('status', (_) => openxr.statusJson());
@@ -48,7 +38,7 @@ class LuminaPluginOpenxrProcess extends PluginProcessAdapter {
     // Keep the panel current when a menu command, the status button's menu
     // or an MCP client changes the state.
     void push() {
-      final view = context is ConnectedPluginProcessContext ? context.views[OpenXrStatusView.viewId] : null;
+      final view = context.view(OpenXrStatusView.viewId);
       if (view != null) OpenXrStatusView.refresh(openxr, view);
     }
 
@@ -60,14 +50,6 @@ class LuminaPluginOpenxrProcess extends PluginProcessAdapter {
   Future<void> onShutdown() async {
     _detach?.call();
     _detach = null;
-    try {
-      await super.onShutdown();
-    } finally {
-      if (_ownsCrashHandler) {
-        LuminaPluginCrashReporter.setHandler(null);
-        _ownsCrashHandler = false;
-      }
-      _process = null;
-    }
+    await super.onShutdown();
   }
 }

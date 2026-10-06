@@ -7,8 +7,8 @@ All notable changes to `lumina_plugin_openxr` will be documented in this file.
 ### Changed
 - Runs in its own process in Lumina Studio (`"isolation": "process"`): `LuminaPluginOpenxrProcess` runs the plugin
   through `PluginProcessAdapter`, so the OpenXR loader bridge, the session and every command live outside the editor;
-  a crash or hang there stops only the plugin process (the editor shows it and offers Restart). The editor module's
-  `registration_class` is now `LuminaPluginOpenxrShell`, which holds no OpenXR code. Debugging override:
+  a crash or hang there stops only the plugin process (the editor shows it and offers Restart). The editor module
+  names only the `process_class` (no `registration_class`), so nothing of OpenXR runs in the editor. Debugging override:
   `.lmproject` `plugin_isolation: {"lumina_plugin_openxr": "in_process"}`.
 - Commands run without a `BuildContext` open the new declarative **OpenXR** panel (`OpenXrStatusView`) instead of a
   dialog.
@@ -21,7 +21,8 @@ All notable changes to `lumina_plugin_openxr` will be documented in this file.
 - `OpenXrBindings.isSimulationForced`; `OpenXrSettingsView` optional `initialStereoMode`, `onChanged`,
   `onStereoModeChanged`; `showOpenXrMessageDialog`, `showOpenXrSettingsDialog`.
 - `get_status` also returns `native_runtime_available` and `stereo_mode`.
-- A crash reporter in the plugin process that sends caught native errors to the editor's log.
+- `package:lumina_plugin_openxr/xr_types.dart`: the plain XR types (`LuminaXRHand`, action and input state) without
+  `dart:ffi` or the OpenXR bridge; the main library still exports them.
 
 ## [0.1.0] - 2026-10-02
 

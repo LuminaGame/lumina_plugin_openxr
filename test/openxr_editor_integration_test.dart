@@ -124,19 +124,5 @@ void main() {
       expect(plugin.isVrPreviewActive, isFalse);
     });
 
-    test('the in-editor shell registers nothing and only takes its process channel', () {
-      final shell = LuminaPluginOpenxrShell();
-      final ctx = _TestEditorContext();
-      shell.register(ctx);
-
-      expect(shell.pluginName, 'lumina_plugin_openxr');
-      expect(ctx.registeredMenuPaths, isEmpty);
-      expect(ctx.registeredSlotButtons, isEmpty);
-      expect(ctx.mcp.listTools(), isEmpty);
-      expect(shell.channel!.pluginName, 'lumina_plugin_openxr');
-
-      shell.unregister(ctx);
-      expect(shell.channel, isNull);
-    });
   });
 }

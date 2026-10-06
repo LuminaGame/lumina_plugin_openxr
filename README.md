@@ -168,6 +168,10 @@ Then `flutter pub get`. Import everything from one library:
 import 'package:lumina_plugin_openxr/lumina_plugin_openxr.dart';
 ```
 
+Code that needs only the plain XR types (`LuminaXRHand`, `OpenXrActionType`, the action and input state classes,
+`OpenXrInteractionProfiles`) can import `package:lumina_plugin_openxr/xr_types.dart` instead: it reaches neither
+`dart:ffi` nor the OpenXR bridge. The main library exports the same types.
+
 ### The native bridge
 
 `hook/build.dart` compiles `src/openxr_bridge_c.cpp` with `package:native_toolchain_c` into the code asset
@@ -291,8 +295,8 @@ cannot take the editor down.
 
 | Where | What runs there |
 |---|---|
-| Plugin process (`LuminaPluginOpenxrProcess`, the module's `process_class`) | `LuminaPluginOpenxrPlugin` unchanged through `PluginProcessAdapter`: the OpenXR loader bridge (`dart:ffi`), `OpenXrBindings`, the session, every menu and status bar command, the `get_status` MCP tool, the OpenXR panel's events (`OpenXrStatusView`), Output Log lines. Caught native errors reported through `LuminaPluginCrashReporter` go to the editor's log under the plugin's name. |
-| Editor (`LuminaPluginOpenxrShell`, the module's `registration_class`) | Nothing of OpenXR: the shell registers no contribution, never opens the bridge, and only keeps the plugin's process channel (`channel.call('status')` answers the `get_status` JSON). The editor draws the menu items, the status bar button (its state arrives as it changes) and the OpenXR panel from what the process sent. |
+| Plugin process (`LuminaPluginOpenxrProcess`, the module's `process_class`) | `LuminaPluginOpenxrPlugin` unchanged through `PluginProcessAdapter`: the OpenXR loader bridge (`dart:ffi`), `OpenXrBindings`, the session, every menu and status bar command, the `get_status` MCP tool, the OpenXR panel's events (`OpenXrStatusView`), Output Log lines. Caught native errors reported through `LuminaPluginCrashReporter` go to the editor's log under the plugin's name (the plugin process runtime forwards them). |
+| Editor | Nothing of OpenXR: the module names only a `process_class` and no `registration_class`, so the plugin has no in-editor part and the editor never opens the bridge. The editor draws the menu items, the status bar button (its state arrives as it changes) and the OpenXR panel from what the process sent. Editor code that needs the state calls the plugin's process channel: `call('status')` answers the `get_status` JSON. |
 
 When the process stops (a crash, or no answer to three health checks in a row), the editor restarts it a few times,
 then marks the plugin stopped: its menu items are greyed out, the OpenXR panel shows the state with a **Restart**
@@ -320,8 +324,8 @@ controllers have plausible poses, and inputs and haptics can be scripted from te
 ```
 lib/
   lumina_plugin_openxr.dart          public library (exports everything below)
+  xr_types.dart                      plain XR types without the native bridge (LuminaXRHand, action state)
   src/lumina_plugin_openxr_plugin.dart   LuminaEditorPlugin: menus, status bar button, MCP tool
-  src/lumina_plugin_openxr_shell.dart    the editor-side shell (registration_class), no OpenXR code
   src/process/    LuminaPluginOpenxrProcess (process_class), OpenXrStatusView (the declarative OpenXR panel)
   src/ffi/        OpenXrBindings (native bridge + simulator switch), OpenXR types/structs, SimulatedOpenXrBackend
   src/session/    OpenXrSession, OpenXrReferenceSpace, OpenXrSpaceConverter
@@ -371,6 +375,7 @@ flutter test test/openxr_stereo_render_test.dart
 flutter test test/xr_components_test.dart
 flutter test test/openxr_editor_integration_test.dart
 flutter test test/openxr_plugin_process_test.dart
+flutter test test/xr_types_library_test.dart
 flutter analyze
 ```
 

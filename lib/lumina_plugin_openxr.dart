@@ -1,7 +1,6 @@
 library;
 
 export 'src/lumina_plugin_openxr_plugin.dart';
-export 'src/lumina_plugin_openxr_shell.dart';
 export 'src/process/lumina_plugin_openxr_process.dart';
 export 'src/process/openxr_status_view.dart';
 export 'src/ffi/openxr_types.dart';
@@ -9,9 +8,7 @@ export 'src/ffi/openxr_bindings.dart';
 export 'src/ffi/simulated_openxr_backend.dart';
 export 'src/session/openxr_session.dart';
 export 'src/session/openxr_space.dart';
-export 'src/input/openxr_action_set.dart';
-export 'src/input/openxr_action_state.dart';
-export 'src/components/lumina_xr_hand.dart';
+export 'xr_types.dart';
 export 'src/components/lumina_xr_hmd_component.dart';
 export 'src/components/lumina_xr_controller_component.dart';
 export 'src/components/lumina_xr_origin_actor.dart';
