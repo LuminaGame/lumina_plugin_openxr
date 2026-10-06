@@ -74,14 +74,18 @@ class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
         icon: LucideIcons.glasses,
         canExecute: () => true,
         execute: (ctx) {
-          _isVrPreviewActive = !_isVrPreviewActive;
-          if (_isVrPreviewActive) {
-            session.beginSession();
-          } else {
-            session.endSession();
+          try {
+            _isVrPreviewActive = !_isVrPreviewActive;
+            if (_isVrPreviewActive) {
+              session.beginSession();
+            } else {
+              session.endSession();
+            }
+            _level?.log('VR Preview ${_isVrPreviewActive ? "started" : "stopped"} (${bindings.activeRuntimeName})',
+                level: 'info', source: 'OpenXR');
+          } catch (e, stack) {
+            reportCrash(e, stack, context: 'Toggle VR Preview');
           }
-          _level?.log('VR Preview ${_isVrPreviewActive ? "started" : "stopped"} (${bindings.activeRuntimeName})',
-              level: 'info', source: 'OpenXR');
         },
       ),
       options: const EditorMenuItemOptions(section: 'run'),

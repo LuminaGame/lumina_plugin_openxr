@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:logging/logging.dart';
+import 'package:lumina_editor_api/lumina_editor_api.dart';
 import 'openxr_types.dart';
 import 'simulated_openxr_backend.dart';
 
@@ -40,9 +41,10 @@ class OpenXrBindings {
       } else if (Platform.isMacOS) {
         _bridgeLib = DynamicLibrary.open('libopenxr_bridge.dylib');
       }
-    } catch (_) {
+    } catch (e) {
       // Library not built or not found in search path; will use simulated runtime.
       _bridgeLib = null;
+      _log.fine('Native OpenXR bridge not loaded ($e), falling back to simulated runtime');
     }
   }
 
@@ -64,8 +66,14 @@ class OpenXrBindings {
     try {
       final func = lib.lookupFunction<_IsRuntimeAvailableC, _IsRuntimeAvailableDart>('openxr_bridge_is_runtime_available');
       return func() == 1;
-    } catch (e) {
+    } catch (e, stack) {
       _log.warning('Failed to query native OpenXR bridge runtime status', e);
+      LuminaPluginCrashReporter.reportCrash(
+        e,
+        stack,
+        plugin: 'lumina_plugin_openxr',
+        context: 'isNativeRuntimeAvailable: openxr_bridge_is_runtime_available',
+      );
       return false;
     }
   }
@@ -82,7 +90,15 @@ class OpenXrBindings {
           final str = ptr.toDartString();
           if (str.isNotEmpty && str != 'None') return str;
         }
-      } catch (_) {}
+      } catch (e, stack) {
+        _log.warning('Failed to get active OpenXR runtime name', e);
+        LuminaPluginCrashReporter.reportCrash(
+          e,
+          stack,
+          plugin: 'lumina_plugin_openxr',
+          context: 'activeRuntimeName: openxr_bridge_get_active_runtime_name',
+        );
+      }
     }
     return isNativeRuntimeAvailable ? 'OpenXR Native Runtime' : 'Lumina Simulated HMD';
   }
@@ -98,7 +114,15 @@ class OpenXrBindings {
         if (ptr != nullptr) {
           return ptr.toDartString();
         }
-      } catch (_) {}
+      } catch (e, stack) {
+        _log.warning('Failed to get active OpenXR runtime path', e);
+        LuminaPluginCrashReporter.reportCrash(
+          e,
+          stack,
+          plugin: 'lumina_plugin_openxr',
+          context: 'activeRuntimePath: openxr_bridge_get_active_runtime_path',
+        );
+      }
     }
     return '';
   }
@@ -115,8 +139,14 @@ class OpenXrBindings {
         final func = lib.lookupFunction<_InitializeC, _InitializeDart>('openxr_bridge_initialize');
         final res = func();
         return res == 0 ? XrResult.success : XrResult.errorInitializationFailed;
-      } catch (e) {
+      } catch (e, stack) {
         _log.warning('Native OpenXR bridge initialization failed, falling back to simulator', e);
+        LuminaPluginCrashReporter.reportCrash(
+          e,
+          stack,
+          plugin: 'lumina_plugin_openxr',
+          context: 'initialize: openxr_bridge_initialize',
+        );
       }
     }
     return _simulator.initialize();
@@ -133,7 +163,15 @@ class OpenXrBindings {
       try {
         final func = lib.lookupFunction<_ShutdownC, _ShutdownDart>('openxr_bridge_shutdown');
         func();
-      } catch (_) {}
+      } catch (e, stack) {
+        _log.warning('Native OpenXR bridge shutdown failed', e);
+        LuminaPluginCrashReporter.reportCrash(
+          e,
+          stack,
+          plugin: 'lumina_plugin_openxr',
+          context: 'shutdown: openxr_bridge_shutdown',
+        );
+      }
     }
     _simulator.shutdown();
   }

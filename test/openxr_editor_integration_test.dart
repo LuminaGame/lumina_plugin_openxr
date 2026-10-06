@@ -59,6 +59,25 @@ class _TestEditorContext implements LuminaEditorContext {
 
   @override
   void registerConsoleCommand(String name, String help, void Function(List<String> args) handler) {}
+
+  @override
+  void registerTab(EditorTabDescriptor tab) {}
+
+  @override
+  void openTab(String tabId, {String? title}) {}
+
+  @override
+  Future<void> saveAsset({required String relativePath, Uint8List? bytes, bool generateThumbnail = true}) async {}
+
+  @override
+  void reportCrash(Object error, StackTrace? stack, {String? plugin, String? context}) {
+    LuminaPluginCrashReporter.reportCrash(
+      error,
+      stack,
+      plugin: plugin ?? 'lumina_plugin_openxr',
+      context: context,
+    );
+  }
 }
 
 void main() {

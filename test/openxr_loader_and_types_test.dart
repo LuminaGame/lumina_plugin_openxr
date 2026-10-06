@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumina_editor_api/lumina_editor_api.dart';
 import 'package:lumina_plugin_openxr/lumina_plugin_openxr.dart';
 
 void main() {
@@ -56,6 +57,31 @@ void main() {
 
       final initRes = bindings.initialize();
       expect(initRes.isSuccess, isTrue);
+    });
+
+    test('LuminaPluginCrashReporter receives crash reports with plugin attribution', () {
+      String? reportedPlugin;
+      Object? reportedError;
+      String? reportedContext;
+
+      LuminaPluginCrashReporter.setHandler((error, stack, {required plugin, context}) {
+        reportedPlugin = plugin;
+        reportedError = error;
+        reportedContext = context;
+      });
+
+      LuminaPluginCrashReporter.reportCrash(
+        Exception('Simulated native boundary fault'),
+        StackTrace.current,
+        plugin: 'lumina_plugin_openxr',
+        context: 'OpenXR Native Interop',
+      );
+
+      expect(reportedPlugin, equals('lumina_plugin_openxr'));
+      expect(reportedError.toString(), contains('Simulated native boundary fault'));
+      expect(reportedContext, equals('OpenXR Native Interop'));
+
+      LuminaPluginCrashReporter.setHandler(null);
     });
   });
 }

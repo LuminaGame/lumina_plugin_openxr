@@ -1,4 +1,5 @@
 import 'package:logging/logging.dart';
+import 'package:lumina_editor_api/lumina_editor_api.dart';
 import 'package:vector_math/vector_math_64.dart' as vm;
 import '../ffi/openxr_bindings.dart';
 import '../ffi/openxr_types.dart';
@@ -32,34 +33,68 @@ class OpenXrSession {
 
   /// Begins the OpenXR session.
   XrResult beginSession() {
-    final res = _bindings.initialize();
-    if (res.isFailure) return res;
+    try {
+      final res = _bindings.initialize();
+      if (res.isFailure) return res;
 
-    if (_bindings.isSimulated) {
-      final simRes = _bindings.simulator.beginSession();
-      if (simRes.isSuccess) {
-        _state = OpenXrSessionState.focused;
+      if (_bindings.isSimulated) {
+        final simRes = _bindings.simulator.beginSession();
+        if (simRes.isSuccess) {
+          _state = OpenXrSessionState.focused;
+        }
+        return simRes;
       }
-      return simRes;
-    }
 
-    _state = OpenXrSessionState.focused;
-    return XrResult.success;
+      _state = OpenXrSessionState.focused;
+      return XrResult.success;
+    } catch (e, stack) {
+      _log.severe('Error beginning OpenXR session: $e');
+      LuminaPluginCrashReporter.reportCrash(
+        e,
+        stack,
+        plugin: 'lumina_plugin_openxr',
+        context: 'OpenXrSession.beginSession',
+      );
+      return XrResult.errorInitializationFailed;
+    }
   }
 
   /// Ends the OpenXR session.
   XrResult endSession() {
-    if (_bindings.isSimulated) {
-      _bindings.simulator.endSession();
+    try {
+      if (_bindings.isSimulated) {
+        _bindings.simulator.endSession();
+      } else {
+        _bindings.shutdown();
+      }
+      _state = OpenXrSessionState.stopping;
+      return XrResult.success;
+    } catch (e, stack) {
+      _log.warning('Error ending OpenXR session: $e');
+      LuminaPluginCrashReporter.reportCrash(
+        e,
+        stack,
+        plugin: 'lumina_plugin_openxr',
+        context: 'OpenXrSession.endSession',
+      );
+      return XrResult.errorInitializationFailed;
     }
-    _state = OpenXrSessionState.stopping;
-    return XrResult.success;
   }
 
   /// Ticks frame lifecycle and queries runtime events.
   void pollEvents() {
-    if (_bindings.isSimulated) {
-      _state = _bindings.simulator.sessionState;
+    try {
+      if (_bindings.isSimulated) {
+        _state = _bindings.simulator.sessionState;
+      }
+    } catch (e, stack) {
+      _log.warning('Error polling OpenXR events: $e');
+      LuminaPluginCrashReporter.reportCrash(
+        e,
+        stack,
+        plugin: 'lumina_plugin_openxr',
+        context: 'OpenXrSession.pollEvents',
+      );
     }
   }
 }
