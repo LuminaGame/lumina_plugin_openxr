@@ -70,6 +70,9 @@ class _TestEditorContext implements LuminaEditorContext {
   Future<void> saveAsset({required String relativePath, Uint8List? bytes, bool generateThumbnail = true}) async {}
 
   @override
+  PluginProcessChannel processChannel(String pluginName) => PluginProcessChannel.detached(pluginName);
+
+  @override
   void reportCrash(Object error, StackTrace? stack, {String? plugin, String? context}) {
     LuminaPluginCrashReporter.reportCrash(
       error,
@@ -119,6 +122,21 @@ void main() {
 
       toggleCmd.execute(null);
       expect(plugin.isVrPreviewActive, isFalse);
+    });
+
+    test('the in-editor shell registers nothing and only takes its process channel', () {
+      final shell = LuminaPluginOpenxrShell();
+      final ctx = _TestEditorContext();
+      shell.register(ctx);
+
+      expect(shell.pluginName, 'lumina_plugin_openxr');
+      expect(ctx.registeredMenuPaths, isEmpty);
+      expect(ctx.registeredSlotButtons, isEmpty);
+      expect(ctx.mcp.listTools(), isEmpty);
+      expect(shell.channel!.pluginName, 'lumina_plugin_openxr');
+
+      shell.unregister(ctx);
+      expect(shell.channel, isNull);
     });
   });
 }

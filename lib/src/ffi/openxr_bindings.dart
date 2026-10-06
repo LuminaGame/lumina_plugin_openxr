@@ -54,6 +54,9 @@ class OpenXrBindings {
   /// Whether simulated runtime is currently forced or active.
   bool get isSimulated => _forceSimulation || !isNativeRuntimeAvailable;
 
+  /// Whether [setForceSimulation] forced the simulated runtime.
+  bool get isSimulationForced => _forceSimulation;
+
   /// Toggles simulation mode manually.
   void setForceSimulation(bool force) {
     _forceSimulation = force;

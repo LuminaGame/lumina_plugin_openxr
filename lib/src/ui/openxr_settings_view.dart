@@ -8,10 +8,22 @@ class OpenXrSettingsView extends StatefulWidget {
   final OpenXrBindings bindings;
   final OpenXrSession session;
 
+  /// The stereo mode shown selected at first.
+  final OpenXrStereoMode initialStereoMode;
+
+  /// Called after the runtime choice or the tracking origin changed.
+  final VoidCallback? onChanged;
+
+  /// Called when the user picks another stereo mode.
+  final ValueChanged<OpenXrStereoMode>? onStereoModeChanged;
+
   const OpenXrSettingsView({
     super.key,
     required this.bindings,
     required this.session,
+    this.initialStereoMode = OpenXrStereoMode.instanced,
+    this.onChanged,
+    this.onStereoModeChanged,
   });
 
   @override
@@ -27,7 +39,7 @@ class _OpenXrSettingsViewState extends State<OpenXrSettingsView> {
   void initState() {
     super.initState();
     _origin = widget.session.trackingOrigin;
-    _stereoMode = OpenXrStereoMode.instanced;
+    _stereoMode = widget.initialStereoMode;
     _forceSimulation = widget.bindings.isSimulated && !widget.bindings.isNativeRuntimeAvailable;
   }
 
@@ -68,6 +80,7 @@ class _OpenXrSettingsViewState extends State<OpenXrSettingsView> {
                             _forceSimulation = val;
                             widget.bindings.setForceSimulation(val);
                           });
+                          widget.onChanged?.call();
                         },
                       ),
                     ],
@@ -103,6 +116,7 @@ class _OpenXrSettingsViewState extends State<OpenXrSettingsView> {
                                       _origin = mode;
                                       widget.session.setTrackingOrigin(mode);
                                     });
+                                    widget.onChanged?.call();
                                   },
                                   child: Text(mode.name),
                                 ),
@@ -128,6 +142,7 @@ class _OpenXrSettingsViewState extends State<OpenXrSettingsView> {
                                     setState(() {
                                       _stereoMode = mode;
                                     });
+                                    widget.onStereoModeChanged?.call(mode);
                                   },
                                   child: Text(mode.name),
                                 ),

@@ -1,6 +1,9 @@
 library;
 
 export 'src/lumina_plugin_openxr_plugin.dart';
+export 'src/lumina_plugin_openxr_shell.dart';
+export 'src/process/lumina_plugin_openxr_process.dart';
+export 'src/process/openxr_status_view.dart';
 export 'src/ffi/openxr_types.dart';
 export 'src/ffi/openxr_bindings.dart';
 export 'src/ffi/simulated_openxr_backend.dart';
@@ -17,3 +20,4 @@ export 'src/render/openxr_filament_bridge.dart';
 export 'src/render/openxr_swapchain.dart';
 export 'src/ui/openxr_status_badge.dart';
 export 'src/ui/openxr_settings_view.dart';
+export 'src/ui/openxr_dialogs.dart';
