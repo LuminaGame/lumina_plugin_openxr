@@ -22,6 +22,7 @@ benzetimli bir başlık.
 - [Hızlı başlangıç](#hızlı-başlangıç)
 - [Kullanım](#kullanım)
 - [Editör entegrasyonu](#editör-entegrasyonu)
+- [Kendi sürecinde çalışır](#kendi-sürecinde-çalışır)
 - [Gözlük olmadan çalışmak](#gözlük-olmadan-çalışmak)
 - [Mimari](#mimari)
 - [Koordinat sistemleri ve birimler](#koordinat-sistemleri-ve-birimler)
@@ -269,16 +270,46 @@ Eklenti etkinleştirildiğinde şunları ekler:
 
 | Yer | Öğe | Ne yapar |
 |---|---|---|
-| **Plugins → OpenXR → Check Runtime** | pencere | Etkin çalışma zamanını ve manifest yolunu ya da benzetimli başlığın kullanıldığını gösterir. |
-| **Plugins → OpenXR → Toggle VR Preview** | komut | Eklentinin OpenXR oturumunu başlatır ya da bitirir ve Output Log'a yazar (kaynak `OpenXR`). |
-| **Plugins → OpenXR → OpenXR Settings** | pencere | Çalışma zamanı ve manifest, **Force Simulated Runtime** anahtarı, izleme orijini (eyeLevel / floorLevel / stage) ve stereo modu seçimi. |
-| **Plugins → OpenXR → About OpenXR Support** | pencere | Sürüm ve özet. |
-| Durum çubuğu (sağ) | **XR Status** düğmesi | Çalışma zamanı tanılamasını açar. |
-| MCP | `lumina_plugin_openxr.get_status` (salt okunur) | `active_runtime`, `manifest_path`, `is_simulated`, `session_state`, `tracking_origin`, `vr_preview_active` döner. |
+| **Plugins → OpenXR → Check Runtime** | **OpenXR** panelini açar | Etkin çalışma zamanını ve manifest yolunu ya da benzetimli başlığın kullanıldığını gösterir. |
+| **Plugins → OpenXR → Toggle VR Preview** | komut, çalışırken işaretli | Eklentinin OpenXR oturumunu başlatır ya da bitirir ve Output Log'a yazar (kaynak `OpenXR`). |
+| **Plugins → OpenXR → OpenXR Settings** | **OpenXR** panelini açar | Çalışma zamanı ve manifest, **Force Simulated Runtime** anahtarı, izleme orijini (eyeLevel / floorLevel / stage) ve stereo modu seçimi. |
+| **Plugins → OpenXR → About OpenXR Support** | **OpenXR** panelini açar | Sürüm ve özet (panelin kapalı About bölümü). |
+| Durum çubuğu (sağ) | **XR** düğmesi | Etkin çalışma zamanını canlı gösterir (`XR (Sim)` ya da `XR: <çalışma zamanı>`; VR önizlemesi çalışırken yeşil ve noktalı); tıklayınca Check Runtime, Toggle VR Preview ve OpenXR Settings içeren bir menü açar. |
+| **OpenXR** paneli (sağ yuva) | bildirimsel panel | Çalışma zamanı, manifest ve türü; Force Simulated Runtime; izleme orijini ve stereo modu; oturum durumu ve Start / Stop VR Preview düğmesi; About. Değişikliği hangi menü, düğme ya da MCP istemcisi yapmış olursa olsun güncel kalır. |
+| MCP | `lumina_plugin_openxr.get_status` (salt okunur) | `active_runtime`, `manifest_path`, `is_simulated`, `native_runtime_available`, `session_state`, `tracking_origin`, `stereo_mode`, `vr_preview_active` döner. |
 
 `OpenXrStatusBadge` (yerel / benzetimli / çevrimdışı gösteren rozet) ve `OpenXrSettingsView` dışa aktarılan
 widget'lardır; bir oyunun kendi arayüzü ya da başka bir eklenti bunları gömebilir. MCP aracına Lumina Studio'nun
-yerleşik MCP sunucusuna bağlı herhangi bir MCP istemcisinden ulaşılır.
+yerleşik MCP sunucusuna bağlı herhangi bir MCP istemcisinden ulaşılır. `LuminaPluginOpenxrPlugin` sıradan, süreç içi
+bir eklenti olarak da çalışır (komutlarını bir `BuildContext` ile çağıran host Check Runtime, Settings ve About
+pencerelerini alır); Lumina Studio onu aşağıda anlatıldığı gibi eklentinin kendi sürecinde çalıştırır.
+
+## Kendi sürecinde çalışır
+
+Manifest `"isolation": "process"` der: Lumina Studio eklentiyi kendi çalıştırılabilir dosyasının ayrı bir sürecinde
+başlatır ve onunla yerel bir bağlantı üzerinden konuşur; böylece bir OpenXR çalışma zamanındaki ya da yerel köprüdeki
+bir çökme veya kilitlenme editörü düşüremez.
+
+| Nerede | Orada ne çalışır |
+|---|---|
+| Eklenti süreci (`LuminaPluginOpenxrProcess`, modülün `process_class`'ı) | `PluginProcessAdapter` üzerinden değiştirilmemiş `LuminaPluginOpenxrPlugin`: OpenXR yükleyici köprüsü (`dart:ffi`), `OpenXrBindings`, oturum, tüm menü ve durum çubuğu komutları, `get_status` MCP aracı, OpenXR panelinin olayları (`OpenXrStatusView`), Output Log satırları. `LuminaPluginCrashReporter` ile bildirilen yakalanmış yerel hatalar eklentinin adıyla editör günlüğüne gider. |
+| Editör (`LuminaPluginOpenxrShell`, modülün `registration_class`'ı) | OpenXR'dan hiçbir şey: kabuk hiçbir katkı kaydetmez, köprüyü hiç açmaz, yalnızca eklentinin süreç kanalını tutar (`channel.call('status')` `get_status` JSON'unu döner). Editör menü öğelerini, durum çubuğu düğmesini (durumu değiştikçe gelir) ve OpenXR panelini sürecin gönderdiklerinden çizer. |
+
+Süreç durduğunda (bir çökme ya da art arda üç sağlık denetimine yanıt vermemesi) editör onu birkaç kez yeniden
+başlatır, sonra eklentiyi durmuş olarak işaretler: menü öğeleri grileşir, OpenXR paneli durumu bir **Restart**
+düğmesiyle gösterir, Plugin Manager durumu, çıkış kodunu ve günlüğün sonunu gösterir ve bir eklenti çökme raporu
+kaydedilir. Editör ve açık level çalışmaya devam eder. Yeniden başlatma yeni bir oturumla başlar (VR önizlemesi
+kapalıdır).
+
+Hata ayıklama: aynı süreç parçasını editörün içinde çalıştırmak için (kesme noktaları, tek süreç) `.lmproject`'te proje
+geçersiz kılmasını ayarlayın:
+
+```json
+"plugin_isolation": {"lumina_plugin_openxr": "in_process"}
+```
+
+ya da Plugin Manager'da **Run in editor process (debugging)** seçeneğini kullanın. Bu durumda OpenXR'daki bir çökme
+yine editörü etkiler.
 
 ## Gözlük olmadan çalışmak
 
@@ -293,12 +324,14 @@ gelir, baş ve kontrolcülerin makul pozları olur, girdiler ve titreşimler tes
 lib/
   lumina_plugin_openxr.dart          genel kütüphane (aşağıdakilerin hepsini dışa aktarır)
   src/lumina_plugin_openxr_plugin.dart   LuminaEditorPlugin: menüler, durum çubuğu düğmesi, MCP aracı
+  src/lumina_plugin_openxr_shell.dart    editör tarafındaki kabuk (registration_class), OpenXR kodu yok
+  src/process/    LuminaPluginOpenxrProcess (process_class), OpenXrStatusView (bildirimsel OpenXR paneli)
   src/ffi/        OpenXrBindings (yerel köprü + benzetim anahtarı), OpenXR türleri/yapıları, SimulatedOpenXrBackend
   src/session/    OpenXrSession, OpenXrReferenceSpace, OpenXrSpaceConverter
   src/input/      aksiyon kümesi, düğme/eksen/vector2 durumu, titreşim, etkileşim profili yolları
   src/components/ LuminaXROriginActor, LuminaXRHMDComponent, LuminaXRControllerComponent, LuminaXRHand
   src/render/     OpenXrStereoView, OpenXrFilamentBridge, OpenXrSwapchainDescriptor
-  src/ui/         OpenXrSettingsView, OpenXrStatusBadge (shadcn_flutter)
+  src/ui/         OpenXrSettingsView, OpenXrStatusBadge, süreç içi pencereler (shadcn_flutter)
 hook/build.dart   köprüyü derleyen Native Assets kancası
 src/              openxr_bridge_c.h / .cpp (C API, FFI_PLUGIN_EXPORT)
 ```
@@ -309,7 +342,7 @@ src/              openxr_bridge_c.h / .cpp (C API, FFI_PLUGIN_EXPORT)
   Dart dizgilerine çevirir. Her çağrı korumalıdır; bir hata `package:logging` (logger `OpenXrBindings`) ile
   kaydedilir ve benzetime düşülür.
 - **İş parçacıkları.** Tüm çağrılar eşzamanlıdır ve dünyanın sahibi olan Dart isolate'inden yapılır (Lumina
-  Studio'da UI isolate'i). Köprü durumunu süreç genelindeki statik değişkenlerde tutar; tek bir isolate'ten çağırın.
+  Studio'da eklenti sürecinin isolate'i, hiçbir zaman editörünki değil). Köprü durumunu süreç genelindeki statik değişkenlerde tutar; tek bir isolate'ten çağırın.
 - **Kare döngüsü.** Döngü oyunun (ya da aracın) elindedir: `session.pollEvents()`, pozları okuyun (bugün
   benzetimden), bileşenlere verin, göz görünümlerini kurun ve çiziciye verin. Instance/oturum oluşturma geldiğinde
   poz ve kare zamanlamasını köprü üstlenecek.
@@ -340,12 +373,17 @@ flutter test test/openxr_session_and_spaces_test.dart
 flutter test test/openxr_stereo_render_test.dart
 flutter test test/xr_components_test.dart
 flutter test test/openxr_editor_integration_test.dart
+flutter test test/openxr_plugin_process_test.dart
 flutter analyze
 ```
 
 Sonuç kodlarını ve yapı düzenlerini, benzetime düşmeyi, oturum durumlarını ve izleme orijinlerini, koordinat
 dönüşümünü, girdi durumlarını, projeksiyon matrisini (sonlu değerler), Filament stereo eşlemesini, origin aktörünün
 bileşenlerini ve editör kaydını (bir host bağlamına karşı menüler ve MCP aracı) kapsarlar.
+`openxr_plugin_process_test.dart` süreç parçasını `runPluginProcessMain` ile `LoopbackHost`'a (gerçek bir loopback
+soketi üzerinden editör tarafı) karşı çalıştırır: katkılar, durum düğmesinin canlı durumu ve menüsü, menü onay işareti,
+OpenXR paneli ve olayları, MCP aracı, kanalın `status` çağrısı, süreci bitirmeden yanıtlanan hatalar, editör
+günlüğündeki çökme raporları ve temiz kapanış.
 
 ## Sorun giderme
 
