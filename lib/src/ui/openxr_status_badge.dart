@@ -1,5 +1,5 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
-import '../ffi/openxr_bindings.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
 
 /// Status bar indicator badge for OpenXR active runtime status.
 class OpenXrStatusBadge extends StatelessWidget {

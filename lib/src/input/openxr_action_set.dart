@@ -1,4 +1,4 @@
-import 'openxr_action_state.dart';
+import 'package:lumina_plugin_openxr/src/input/openxr_action_state.dart';
 
 /// Standard OpenXR Interaction Profiles.
 class OpenXrInteractionProfiles {

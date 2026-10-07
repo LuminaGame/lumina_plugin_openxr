@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:lumina_editor_api/lumina_editor_api.dart';
 
-import '../lumina_plugin_openxr_plugin.dart';
-import 'openxr_status_view.dart';
+import 'package:lumina_plugin_openxr/src/lumina_plugin_openxr_plugin.dart';
+import 'package:lumina_plugin_openxr/src/process/openxr_status_view.dart';
 
 /// The OpenXR plugin's own process (`.lmplugin` `process_class`): it runs
 /// [LuminaPluginOpenxrPlugin] unchanged through [PluginProcessAdapter], so

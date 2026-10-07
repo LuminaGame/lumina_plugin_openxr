@@ -1,7 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
-import '../lumina_plugin_openxr_plugin.dart';
-import 'openxr_settings_view.dart';
+import 'package:lumina_plugin_openxr/src/lumina_plugin_openxr_plugin.dart';
+import 'package:lumina_plugin_openxr/src/ui/openxr_settings_view.dart';
 
 /// A dialog with [title], [message] and one close button.
 void showOpenXrMessageDialog(

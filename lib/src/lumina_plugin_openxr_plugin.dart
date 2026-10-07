@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:lumina_editor_api/lumina_editor_api.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
-import 'ffi/openxr_bindings.dart';
-import 'ffi/openxr_types.dart';
-import 'render/openxr_filament_bridge.dart';
-import 'session/openxr_session.dart';
-import 'ui/openxr_dialogs.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/render/openxr_filament_bridge.dart';
+import 'package:lumina_plugin_openxr/src/session/openxr_session.dart';
+import 'package:lumina_plugin_openxr/src/ui/openxr_dialogs.dart';
 
 /// Khronos OpenXR plugin for Lumina Studio.
 ///

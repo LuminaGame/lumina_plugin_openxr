@@ -1,5 +1,5 @@
 import 'package:vector_math/vector_math_64.dart' as vm;
-import 'openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 
 /// Simulated OpenXR runtime backend for development, CI, and testing without physical VR hardware.
 class SimulatedOpenXrBackend {

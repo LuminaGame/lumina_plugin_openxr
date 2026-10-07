@@ -1,6 +1,6 @@
 import 'package:lumina/lumina.dart';
 import 'package:vector_math/vector_math_64.dart';
-import '../session/openxr_space.dart';
+import 'package:lumina_plugin_openxr/src/session/openxr_space.dart';
 
 /// Scene component driving camera viewpoint and head tracking transforms from OpenXR HMD pose.
 class LuminaXRHMDComponent extends LuminaSceneComponent {

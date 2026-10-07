@@ -1,9 +1,9 @@
 import 'package:logging/logging.dart';
 import 'package:lumina_editor_api/lumina_editor_api.dart';
 import 'package:vector_math/vector_math_64.dart' as vm;
-import '../ffi/openxr_bindings.dart';
-import '../ffi/openxr_types.dart';
-import 'openxr_space.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/session/openxr_space.dart';
 
 final _log = Logger('OpenXrSession');
 

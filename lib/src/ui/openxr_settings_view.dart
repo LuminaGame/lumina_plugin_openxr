@@ -1,7 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
-import '../ffi/openxr_bindings.dart';
-import '../ffi/openxr_types.dart';
-import '../session/openxr_session.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/session/openxr_session.dart';
 
 /// Settings panel for OpenXR configuration.
 class OpenXrSettingsView extends StatefulWidget {

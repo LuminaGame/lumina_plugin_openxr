@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:logging/logging.dart';
 import 'package:lumina_editor_api/lumina_editor_api.dart';
-import 'openxr_types.dart';
-import 'simulated_openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/ffi/simulated_openxr_backend.dart';
 
 final _log = Logger('OpenXrBindings');
 

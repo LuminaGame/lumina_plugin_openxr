@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:lumina_editor_api/lumina_editor_api.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
 
-import '../ffi/openxr_types.dart';
-import '../lumina_plugin_openxr_plugin.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/lumina_plugin_openxr_plugin.dart';
 
 /// The OpenXR panel as a declarative view: runtime status, the runtime
 /// choice, tracking and stereo settings, the VR preview and the About text.

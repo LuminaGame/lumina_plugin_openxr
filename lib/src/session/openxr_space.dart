@@ -1,5 +1,5 @@
 import 'package:vector_math/vector_math_64.dart' as vm;
-import '../ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 
 /// Coordinate space conversions between OpenXR (metres, right-handed Y-up)
 /// and Lumina engine storage (centimetres, right-handed Z-up).

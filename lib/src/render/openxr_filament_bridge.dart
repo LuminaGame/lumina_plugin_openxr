@@ -1,7 +1,7 @@
 import 'package:flutter_filament/flutter_filament.dart';
 import 'package:logging/logging.dart';
-import '../ffi/openxr_types.dart';
-import 'openxr_stereo_view.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/render/openxr_stereo_view.dart';
 
 final _log = Logger('OpenXrFilamentBridge');
 

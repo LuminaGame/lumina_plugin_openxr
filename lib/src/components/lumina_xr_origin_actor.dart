@@ -1,9 +1,9 @@
 import 'package:lumina/lumina.dart';
 import 'package:vector_math/vector_math_64.dart';
-import '../ffi/openxr_types.dart';
-import 'lumina_xr_controller_component.dart';
-import 'lumina_xr_hand.dart';
-import 'lumina_xr_hmd_component.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/components/lumina_xr_controller_component.dart';
+import 'package:lumina_plugin_openxr/src/components/lumina_xr_hand.dart';
+import 'package:lumina_plugin_openxr/src/components/lumina_xr_hmd_component.dart';
 
 /// Root XR Player Tracking Origin Actor representing the VR play space in the Lumina world.
 class LuminaXROriginActor extends LuminaActor {
