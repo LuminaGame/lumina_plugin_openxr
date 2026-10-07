@@ -15,22 +15,22 @@ dependencies:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina_editor_api
-      ref: 1da1433f0d7478a8591a4356f793bd68a82a5084
+      ref: 87ca08bec43927031cb16a4297336d4d96389e35
   lumina_plugin_process:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina_plugin_process
-      ref: 1da1433f0d7478a8591a4356f793bd68a82a5084
+      ref: 87ca08bec43927031cb16a4297336d4d96389e35
   lumina:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina
-      ref: 1da1433f0d7478a8591a4356f793bd68a82a5084
+      ref: 87ca08bec43927031cb16a4297336d4d96389e35
   flutter_filament:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: flutter_filament
-      ref: 1da1433f0d7478a8591a4356f793bd68a82a5084
+      ref: 87ca08bec43927031cb16a4297336d4d96389e35
   shadcn_flutter: 0.0.55
   ffi: ^2.1.2
   vector_math: ^2.1.4
