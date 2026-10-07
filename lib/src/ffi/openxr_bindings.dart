@@ -2,7 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:logging/logging.dart';
-import 'package:lumina_editor_api/lumina_editor_api.dart';
+import 'package:lumina_plugin_process/lumina_plugin_process.dart' show LuminaPluginCrashReporter;
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 import 'package:lumina_plugin_openxr/src/ffi/simulated_openxr_backend.dart';
 

@@ -5,6 +5,11 @@ All notable changes to `lumina_plugin_openxr` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The process part is pure Dart: `LuminaPluginOpenxrProcess` registers the menus, the status bar button, the MCP
+  tool and the OpenXR panel itself from the new `OpenXrController` (the plugin's state and actions) through
+  `lumina_plugin_process`, instead of running `LuminaPluginOpenxrPlugin` through `PluginProcessAdapter`; the
+  contributions and their behaviour are unchanged. `LuminaPluginOpenxrPlugin` (in process, with dialogs) wraps the same
+  controller. `OpenXrBindings` and `OpenXrSession` take `LuminaPluginCrashReporter` from `lumina_plugin_process`.
 - Runs in its own process in Lumina Studio (`"isolation": "process"`): `LuminaPluginOpenxrProcess` runs the plugin
   through `PluginProcessAdapter`, so the OpenXR loader bridge, the session and every command live outside the editor;
   a crash or hang there stops only the plugin process (the editor shows it and offers Restart). The editor module

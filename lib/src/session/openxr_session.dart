@@ -1,5 +1,5 @@
 import 'package:logging/logging.dart';
-import 'package:lumina_editor_api/lumina_editor_api.dart';
+import 'package:lumina_plugin_process/lumina_plugin_process.dart' show LuminaPluginCrashReporter;
 import 'package:vector_math/vector_math_64.dart' as vm;
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';

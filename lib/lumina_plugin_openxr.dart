@@ -2,6 +2,7 @@ library;
 
 export 'src/lumina_plugin_openxr_plugin.dart';
 export 'src/process/lumina_plugin_openxr_process.dart';
+export 'src/process/openxr_controller.dart';
 export 'src/process/openxr_status_view.dart';
 export 'src/ffi/openxr_types.dart';
 export 'src/ffi/openxr_bindings.dart';

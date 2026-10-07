@@ -3,46 +3,52 @@ import 'package:lumina_editor_api/lumina_editor_api.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/process/openxr_controller.dart';
 import 'package:lumina_plugin_openxr/src/render/openxr_filament_bridge.dart';
 import 'package:lumina_plugin_openxr/src/session/openxr_session.dart';
 import 'package:lumina_plugin_openxr/src/ui/openxr_dialogs.dart';
 
-/// Khronos OpenXR plugin for Lumina Studio.
+/// Khronos OpenXR plugin for Lumina Studio, as an in-process
+/// [LuminaEditorPlugin] over the pure [OpenXrController].
 ///
-/// Its contributions are data (menu items, a status bar slot button with a
-/// menu, an MCP tool), so in Lumina Studio it runs in its own process
-/// through [LuminaPluginOpenxrProcess]: every OpenXR loader call happens
-/// there. Commands that run without a `BuildContext` (always the case in
-/// the plugin process) open the declarative OpenXR panel instead of a
-/// dialog.
+/// In Lumina Studio the plugin runs in its own process through
+/// `LuminaPluginOpenxrProcess` (every OpenXR loader call happens there); this
+/// class serves a Flutter host that loads it in process, with dialogs.
+/// Commands that run without a `BuildContext` open the OpenXR panel instead
+/// of a dialog.
 class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
-  static const String friendlyName = 'OpenXR Support';
-  static const String version = '0.1.0';
+  LuminaPluginOpenxrPlugin([OpenXrController? controller]) : controller = controller ?? OpenXrController() {
+    filamentBridge = OpenXrFilamentBridge();
+    _status = ValueNotifier(_buttonStateOf(this.controller.statusButtonState.value));
+    this.controller.changes.addListener(_mirror);
+  }
+
+  static const String friendlyName = OpenXrController.friendlyName;
+  static const String version = OpenXrController.version;
 
   /// The OpenXR panel the plugin process registers
   /// (`PluginProcessViewPanel`); commands run without a `BuildContext` show it.
-  static const String panelId = 'panel.lumina_plugin_openxr.status';
+  static const String panelId = OpenXrController.panelId;
 
-  final OpenXrBindings bindings = OpenXrBindings.instance;
-  late final OpenXrSession session;
+  /// The About text, shown in the About dialog and the OpenXR panel.
+  static const String aboutText = OpenXrController.aboutText;
+
+  /// The plugin's state and actions.
+  final OpenXrController controller;
   late final OpenXrFilamentBridge filamentBridge;
 
   final ValueNotifier<bool> _previewActive = ValueNotifier(false);
-  late final ValueNotifier<EditorButtonState> _status = ValueNotifier(_statusOf());
+  late final ValueNotifier<EditorButtonState> _status;
   final ValueNotifier<int> _revision = ValueNotifier(0);
-  OpenXrStereoMode _stereoMode = OpenXrStereoMode.instanced;
-  EditorLevelAccess? _level;
   LuminaEditorContext? _context;
 
-  LuminaPluginOpenxrPlugin() {
-    session = OpenXrSession(bindings: bindings);
-    filamentBridge = OpenXrFilamentBridge();
-  }
+  OpenXrBindings get bindings => controller.bindings;
+  OpenXrSession get session => controller.session;
 
   @override
-  String get pluginName => 'lumina_plugin_openxr';
+  String get pluginName => OpenXrController.pluginName;
 
-  bool get isVrPreviewActive => _previewActive.value;
+  bool get isVrPreviewActive => controller.isVrPreviewActive;
 
   /// Whether the VR preview runs; the Toggle VR Preview menu item's check mark.
   ValueListenable<bool> get vrPreview => _previewActive;
@@ -56,69 +62,39 @@ class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
   Listenable get changes => _revision;
 
   /// The stereo rendering mode chosen in the settings.
-  OpenXrStereoMode get stereoMode => _stereoMode;
+  OpenXrStereoMode get stereoMode => controller.stereoMode;
 
-  set stereoMode(OpenXrStereoMode mode) {
-    if (mode == _stereoMode) return;
-    _stereoMode = mode;
-    refreshStatus();
-  }
+  set stereoMode(OpenXrStereoMode mode) => controller.stereoMode = mode;
 
   /// Forces the simulated runtime (or goes back to the native one).
-  void setForceSimulation(bool force) {
-    bindings.setForceSimulation(force);
-    refreshStatus();
-  }
+  void setForceSimulation(bool force) => controller.setForceSimulation(force);
 
   /// Moves the tracking space to [origin].
-  void setTrackingOrigin(OpenXrTrackingOrigin origin) {
-    session.setTrackingOrigin(origin);
-    refreshStatus();
-  }
+  void setTrackingOrigin(OpenXrTrackingOrigin origin) => controller.setTrackingOrigin(origin);
 
   /// Starts or stops the VR preview session; returns whether it runs now.
-  bool toggleVrPreview() {
-    try {
-      if (_previewActive.value) {
-        session.endSession();
-        _previewActive.value = false;
-      } else {
-        final result = session.beginSession();
-        _previewActive.value = result.isSuccess;
-        if (result.isFailure) {
-          _level?.log('VR Preview could not start: ${result.name} (${bindings.activeRuntimeName})',
-              level: 'error', source: 'OpenXR');
-        }
-      }
-      _level?.log('VR Preview ${_previewActive.value ? "started" : "stopped"} (${bindings.activeRuntimeName})',
-          level: 'info', source: 'OpenXR');
-    } catch (e, stack) {
-      reportCrash(e, stack, context: 'Toggle VR Preview');
-    }
-    refreshStatus();
-    return _previewActive.value;
-  }
+  bool toggleVrPreview() => controller.toggleVrPreview();
 
   /// Re-reads the runtime and updates the status button and [changes].
-  void refreshStatus() {
-    _status.value = _statusOf();
+  void refreshStatus() => controller.refreshStatus();
+
+  /// The runtime and session status as JSON (the `get_status` MCP tool).
+  Map<String, Object?> statusJson() => controller.statusJson();
+
+  void _mirror() {
+    _previewActive.value = controller.isVrPreviewActive;
+    _status.value = _buttonStateOf(controller.statusButtonState.value);
     _revision.value++;
   }
 
-  EditorButtonState _statusOf() {
-    final simulated = bindings.isSimulated;
-    final name = bindings.activeRuntimeName;
-    final preview = _previewActive.value;
-    return EditorButtonState(
-      label: simulated ? 'XR (Sim)' : 'XR: $name',
-      tooltip: 'OpenXR runtime: $name${simulated ? ' (simulated)' : ''}'
-          '${preview ? ' · VR Preview running' : ''}',
-      icon: LucideIcons.glasses,
-      tone: preview ? EditorTone.success : (simulated ? EditorTone.neutral : EditorTone.primary),
-      active: preview,
-      badge: preview ? '●' : null,
-    );
-  }
+  static EditorButtonState _buttonStateOf(PluginButtonStateSpec s) => EditorButtonState(
+        label: s.label,
+        tooltip: s.tooltip,
+        icon: LucideIcons.glasses,
+        tone: EditorTone.values.byName(s.tone),
+        active: s.active,
+        badge: s.badge,
+      );
 
   /// Shows the runtime diagnostic: a dialog with a [ctx], else the OpenXR panel.
   void _showDiagnostic(BuildContext? ctx) {
@@ -126,10 +102,8 @@ class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
       _context?.panels.show(panelId);
       return;
     }
-    final status = bindings.isNativeRuntimeAvailable
-        ? 'Active Native Runtime: ${bindings.activeRuntimeName}\nPath: ${bindings.activeRuntimePath}'
-        : 'No physical OpenXR runtime active. Using internal Simulated HMD backend for development.';
-    showOpenXrMessageDialog(ctx, title: 'OpenXR Runtime Diagnostic', message: status, closeLabel: 'OK');
+    showOpenXrMessageDialog(ctx,
+        title: 'OpenXR Runtime Diagnostic', message: controller.diagnosticText, closeLabel: 'OK');
   }
 
   void _showSettings(BuildContext? ctx) {
@@ -147,10 +121,6 @@ class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
     }
     showOpenXrMessageDialog(ctx, title: friendlyName, message: aboutText, closeLabel: 'Close');
   }
-
-  /// The About text, shown in the About dialog and the OpenXR panel.
-  static const String aboutText = 'Khronos OpenXR 1.0/1.1 runtime management, stereoscopic rendering bridge for '
-      'Filament, and XR origin/controller tracking components.\nVersion: $version';
 
   EditorCommand get _checkRuntimeCommand => EditorCommand(
         id: 'tools.lumina_plugin_openxr.checkRuntime',
@@ -179,9 +149,8 @@ class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
   @override
   void register(LuminaEditorContext context) {
     _context = context;
-    if (context is LuminaEditorHostContext) {
-      _level = context.level;
-    }
+    final level = context is LuminaEditorHostContext ? context.level : null;
+    controller.log = level == null ? null : (message, lvl) => level.log(message, level: lvl, source: 'OpenXR');
     refreshStatus();
 
     context.registerMenuItem('Plugins/OpenXR/Check Runtime', _checkRuntimeCommand,
@@ -243,35 +212,13 @@ class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
     );
 
     // MCP tool for AI agents.
-    context.mcp.registerTool(
-      McpTool(
-        name: 'get_status',
-        description: 'Returns OpenXR runtime diagnostic details and tracking session status.',
-        inputSchema: const {'type': 'object', 'properties': <String, Object?>{}},
-        risk: McpToolRisk.readOnly,
-        groups: const {McpToolGroups.plugin},
-        handler: (args) async => McpToolResult.json(statusJson()),
-      ),
-    );
+    context.mcp.registerTool(controller.statusTool);
   }
-
-  /// The runtime and session status as JSON (the `get_status` MCP tool).
-  Map<String, Object?> statusJson() => {
-        'active_runtime': bindings.activeRuntimeName,
-        'manifest_path': bindings.activeRuntimePath,
-        'is_simulated': bindings.isSimulated,
-        'native_runtime_available': bindings.isNativeRuntimeAvailable,
-        'session_state': session.state.name,
-        'tracking_origin': session.trackingOrigin.name,
-        'stereo_mode': _stereoMode.name,
-        'vr_preview_active': _previewActive.value,
-      };
 
   @override
   void unregister(LuminaEditorContext context) {
-    session.endSession();
+    controller.shutdown();
     _previewActive.value = false;
-    _level = null;
     _context = null;
   }
 }
