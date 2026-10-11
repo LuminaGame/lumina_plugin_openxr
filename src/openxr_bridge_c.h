@@ -222,6 +222,54 @@ FFI_PLUGIN_EXPORT void openxr_bridge_skip_frame(int64_t frame);
 /// Frames the renderer ended with a projection layer.
 FFI_PLUGIN_EXPORT int64_t openxr_bridge_rendered_frames(void);
 
+// ---------------------------------------------------------------------------
+// Input: action sets, actions, bindings, states, action spaces, haptics.
+//
+// Hands: 0 left (/user/hand/left), 1 right (/user/hand/right), -1 none.
+// Action types are XrActionType values: 1 boolean, 2 float, 3 vector2f,
+// 4 pose, 100 vibration output.
+
+/// xrCreateActionSet. Returns an action set id (> 0) or a negative XrResult.
+FFI_PLUGIN_EXPORT int64_t openxr_bridge_create_action_set(const char* name, const char* localized_name, uint32_t priority);
+/// xrCreateAction in [action_set]; [per_hand] gives it both hands as subaction
+/// paths. Returns an action id (> 0) or a negative XrResult.
+FFI_PLUGIN_EXPORT int64_t openxr_bridge_create_action(int64_t action_set, const char* name, const char* localized_name,
+        int32_t type, bool per_hand);
+/// xrSuggestInteractionProfileBindings for [profile]
+/// ("/interaction_profiles/oculus/touch_controller"): binding i binds
+/// actions[i] to paths[i] ("/user/hand/left/input/squeeze/value").
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_suggest_bindings(const char* profile, const int64_t* actions,
+        const char* const* paths, uint32_t count);
+/// xrAttachSessionActionSets with every action set created so far (once per session).
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_attach_action_sets(void);
+/// Whether the action sets are attached to the current session.
+FFI_PLUGIN_EXPORT bool openxr_bridge_action_sets_attached(void);
+/// xrSyncActions for every attached action set.
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_sync_actions(void);
+
+/// The current state of [action] for [hand]: value, whether it is active
+/// (bound and its device present).
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_action_state_boolean(int64_t action, int32_t hand, bool* value, bool* active);
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_action_state_float(int64_t action, int32_t hand, float* value, bool* active);
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_action_state_vector2f(int64_t action, int32_t hand, float* x, float* y,
+        bool* active);
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_action_state_pose(int64_t action, int32_t hand, bool* active);
+
+/// xrCreateActionSpace for pose [action] and [hand] (identity pose in action
+/// space). Returns a space id for openxr_bridge_locate_space, or a negative XrResult.
+FFI_PLUGIN_EXPORT int64_t openxr_bridge_create_action_space(int64_t action, int32_t hand);
+
+/// xrApplyHapticFeedback on vibration [action] for [hand]: [duration_ns]
+/// (-1 XR_MIN_HAPTIC_DURATION), [frequency] Hz (0 XR_FREQUENCY_UNSPECIFIED),
+/// [amplitude] 0..1.
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_apply_haptic(int64_t action, int32_t hand, int64_t duration_ns, float frequency,
+        float amplitude);
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_stop_haptic(int64_t action, int32_t hand);
+
+/// xrGetCurrentInteractionProfile for [hand]: writes the profile path
+/// ("" when none is active) into [out]; returns the XrResult.
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_current_interaction_profile(int32_t hand, char* out, uint32_t capacity);
+
 #ifdef __cplusplus
 }
 #endif

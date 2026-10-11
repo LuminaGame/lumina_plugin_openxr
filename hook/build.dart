@@ -15,6 +15,7 @@ const bridgeSources = [
   'src/openxr_android_c.cpp',
   'src/openxr_frame_c.cpp',
   'src/openxr_swapchain_c.cpp',
+  'src/openxr_input_c.cpp',
 ];
 const bridgeIncludes = ['src', 'third_party/openxr/include', 'third_party/vulkan/include'];
 

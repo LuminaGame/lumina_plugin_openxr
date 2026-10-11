@@ -3,6 +3,7 @@ import 'package:vector_math/vector_math_64.dart' as vm;
 
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
 import 'package:lumina_plugin_openxr/src/backend/openxr_native_backend.dart';
+import 'package:lumina_plugin_openxr/src/input/openxr_input_bindings.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
@@ -36,6 +37,10 @@ class OpenXrSession {
 
   /// Called when the runtime asks the application to quit (EXITING).
   void Function()? onExitRequested;
+
+  /// Called when the runtime switched a hand's interaction profile
+  /// (`OpenXrInputSystem.refreshInteractionProfiles`).
+  void Function()? onInteractionProfileChanged;
 
   /// The renderer's device-info functions (`openXrFilamentDeviceInfo()`):
   /// a native session creates its Vulkan device with them. Without them a
@@ -73,12 +78,14 @@ class OpenXrSession {
   XrResult beginSession() {
     try {
       final backend = this.backend;
-      var r = backend.createInstance(optionalExtensions: const [
+      var r = backend.createInstance(optionalExtensions: [
         'XR_EXT_local_floor',
         'XR_FB_display_refresh_rate',
         'XR_FB_passthrough',
         'XR_EXT_hand_tracking',
         'XR_FB_composition_layer_alpha_blend',
+        // The controller profiles that need an extension (Touch Plus).
+        ...OpenXrInputBindings.defaults.extensions,
       ]);
       if (r.isFailure) return r;
       if (backend is OpenXrNativeBackend) {
@@ -130,6 +137,7 @@ class OpenXrSession {
         final event = backend.pollEvent();
         if (event == null) break;
         handled.add(event);
+        if (event is OpenXrInteractionProfileChanged) onInteractionProfileChanged?.call();
         for (final action in machine.onEvent(event)) {
           _perform(action);
         }

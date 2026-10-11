@@ -14,6 +14,7 @@ const SmokeReportConfig openXrSmokeConfig = SmokeReportConfig(
   tag: 'lumina_plugin_openxr',
   dashboardTitle: 'OpenXR Smoke Tests',
   categories: TestCategories([
+    ('input', ['input']),
     ('frame_loop', ['frame_loop', 'openxr']),
   ]),
   categoryNote: 'Every PNG and video is linked from build/smoke_artifacts/, not embedded.',

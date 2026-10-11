@@ -1,6 +1,9 @@
 import 'package:vector_math/vector_math_64.dart' as vm;
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/components/lumina_xr_hand.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/input/openxr_input_backend.dart';
+import 'package:lumina_plugin_openxr/src/input/openxr_input_bindings.dart';
 import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
 
 /// Simulated OpenXR runtime backend for development, CI, and testing without physical VR hardware.
@@ -9,7 +12,7 @@ import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
 /// instance, SYNCHRONIZED, VISIBLE and FOCUSED after `beginSession`, IDLE
 /// after `endSession`, EXITING on shutdown), so a session follows the same
 /// event-driven state machine as on a headset.
-class SimulatedOpenXrBackend implements OpenXrBackend {
+class SimulatedOpenXrBackend implements OpenXrBackend, OpenXrInputBackend {
   final List<OpenXrRuntimeEvent> _events = [];
 
   bool _initialized = false;
@@ -51,9 +54,33 @@ class SimulatedOpenXrBackend implements OpenXrBackend {
   bool rightPrimaryButton = false;
   bool rightSecondaryButton = false;
 
+  // Simulated tracking, the remaining buttons and the aim offset (the aim
+  // pose is the grip pose pitched by [aimPitch] radians, like a Touch
+  // controller's pointing ray).
+  bool leftTracked = true;
+  bool rightTracked = true;
+  bool leftMenuButton = false;
+  bool leftThumbstickClick = false;
+  bool rightThumbstickClick = false;
+  bool leftTriggerTouch = false;
+  bool rightTriggerTouch = false;
+  double aimPitch = -0.5;
+
+  /// The interaction profile the simulated controllers report.
+  String simulatedInteractionProfile = '/interaction_profiles/oculus/touch_controller';
+
   // Last received haptic feedback parameters
   double lastHapticAmplitude = 0.0;
   int lastHapticDurationNano = 0;
+
+  /// Every haptic pulse applied, in order (tests read them).
+  final List<({LuminaXRHand hand, double amplitude, int durationNs, double frequency})> hapticPulses = [];
+
+  /// Every `syncInput` display time, in order.
+  final List<int> inputSyncTimes = [];
+
+  bool _inputReady = false;
+  final List<String> _suggestedProfiles = [];
 
   bool get isInitialized => _initialized;
   OpenXrSessionState get sessionState => _sessionState;
@@ -142,6 +169,7 @@ class SimulatedOpenXrBackend implements OpenXrBackend {
   void destroy() {
     shutdown();
     _events.clear();
+    _inputReady = false;
   }
 
   /// Calculates Left eye view pose and FOV.
@@ -224,4 +252,67 @@ class SimulatedOpenXrBackend implements OpenXrBackend {
     lastHapticAmplitude = amplitude;
     lastHapticDurationNano = durationNano;
   }
+
+  // --- Input -----------------------------------------------------------------
+
+  @override
+  OpenXrInputBackend get input => this;
+
+  @override
+  bool get inputReady => _inputReady;
+
+  @override
+  List<String> get suggestedProfiles => List.unmodifiable(_suggestedProfiles);
+
+  /// Suggests the core profiles (the simulator offers no extension).
+  @override
+  XrResult setupInput(OpenXrInputBindings bindings) {
+    if (!_initialized) return XrResult.errorInitializationFailed;
+    _suggestedProfiles
+      ..clear()
+      ..addAll([for (final p in bindings.profilesToSuggest(extensionEnabled)) p.path]);
+    _inputReady = true;
+    return XrResult.success;
+  }
+
+  @override
+  List<OpenXrControllerSample>? syncInput(int baseSpaceType, int displayTime) {
+    if (!_inputReady) return null;
+    inputSyncTimes.add(displayTime);
+    OpenXrControllerSample sample(bool left) {
+      final tracked = left ? leftTracked : rightTracked;
+      final position = left ? leftGripPosition : rightGripPosition;
+      final orientation = left ? leftGripOrientation : rightGripOrientation;
+      final aim = orientation * vm.Quaternion.axisAngle(vm.Vector3(1, 0, 0), aimPitch);
+      return OpenXrControllerSample(
+        grip: tracked ? OpenXrPose(position, orientation) : null,
+        aim: tracked ? OpenXrPose(position, aim) : null,
+        gripValue: left ? leftGrip : rightGrip,
+        triggerValue: left ? leftTrigger : rightTrigger,
+        triggerTouched: left ? leftTriggerTouch : rightTriggerTouch,
+        thumbstick: (left ? leftThumbstick : rightThumbstick).clone(),
+        thumbstickClick: left ? leftThumbstickClick : rightThumbstickClick,
+        primary: left ? leftPrimaryButton : rightPrimaryButton,
+        secondary: left ? leftSecondaryButton : rightSecondaryButton,
+        menu: left && leftMenuButton,
+      );
+    }
+
+    return [sample(true), sample(false)];
+  }
+
+  @override
+  XrResult applyHaptic(LuminaXRHand hand,
+      {required double amplitude, required int durationNs, double frequency = OpenXrHaptics.frequencyUnspecified}) {
+    if (!_inputReady) return XrResult.errorHandleInvalid;
+    hapticPulses.add((hand: hand, amplitude: amplitude, durationNs: durationNs, frequency: frequency));
+    applyHapticFeedback(amplitude: amplitude, durationNano: durationNs);
+    return XrResult.success;
+  }
+
+  @override
+  XrResult stopHaptic(LuminaXRHand hand) => _inputReady ? XrResult.success : XrResult.errorHandleInvalid;
+
+  @override
+  String interactionProfile(LuminaXRHand hand) => _inputReady ? simulatedInteractionProfile : '';
 }

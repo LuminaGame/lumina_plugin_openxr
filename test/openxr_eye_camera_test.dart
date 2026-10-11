@@ -50,4 +50,19 @@ void main() {
     expect(culling.entry(0, 0), closeTo(2 / (r - l), 1e-6));
     expect(culling.entry(0, 2), closeTo(0, 1e-6));
   });
+
+  test('the camera sits at the head (culling looks where the eyes look); the eyes are relative to it', () {
+    final views = [eye(-0.0315), eye(0.0315)];
+    final head = OpenXrEyeCamera.head(views, unitsPerMetre: 100);
+    expect(head.getTranslation(), vm.Vector3(0, 160, 0));
+    final cameras = OpenXrEyeCamera.fromViews(views, unitsPerMetre: 100);
+    final left = OpenXrEyeCamera.relativeTo(head, cameras[0].model);
+    expect(left.getTranslation().x, closeTo(-3.15, 1e-9));
+    expect(left.getTranslation().y, closeTo(0, 1e-9));
+    // Head times relative eye is the eye again.
+    final back = head.multiplied(left);
+    for (var i = 0; i < 16; i++) {
+      expect(back.storage[i], closeTo(cameras[0].model.storage[i], 1e-9));
+    }
+  });
 }

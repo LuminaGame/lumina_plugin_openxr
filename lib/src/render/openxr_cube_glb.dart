@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// A unit cube (side [size] metres) as a binary glTF: positions, normals and
+/// A cube (side [size] metres) as a binary glTF: positions, normals and
 /// indices per face, one PBR material of [color] (linear RGBA). The glTF
 /// loader computes the tangents; the ubershader materials carry a multiview
 /// variant, so the cube renders in both eyes in one pass.
-Uint8List cubeGlb({double size = 0.3, List<double> color = const [0.9, 0.35, 0.1, 1.0], double roughness = 0.4}) {
+Uint8List openXrCubeGlb({double size = 0.3, List<double> color = const [0.9, 0.35, 0.1, 1.0], double roughness = 0.4}) {
   final h = size / 2;
   // Each face: normal, then its four corners (counter-clockwise seen from outside).
   final faces = <(List<double>, List<List<double>>)>[
@@ -38,7 +38,7 @@ Uint8List cubeGlb({double size = 0.3, List<double> color = const [0.9, 0.35, 0.1
     bin.addByte(0);
   }
   final json = {
-    'asset': {'version': '2.0', 'generator': 'lumina openxr example'},
+    'asset': {'version': '2.0', 'generator': 'lumina_plugin_openxr'},
     'scene': 0,
     'scenes': [
       {'nodes': [0]},

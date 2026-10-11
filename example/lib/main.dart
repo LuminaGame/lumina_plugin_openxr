@@ -6,12 +6,12 @@ import 'package:flutter_filament/filament.dart';
 import 'package:lumina_plugin_openxr/runtime.dart';
 import 'package:vector_math/vector_math_64.dart' as vm;
 
-import 'package:openxr_example/cube_glb.dart';
-
 /// Immersive bring-up on a headset: the OpenXR session on the native runtime,
 /// Filament on the runtime's Vulkan device rendering both eyes (multiview)
-/// into the compositor's swapchain at the headset's rate, and turning cubes
-/// in front of the user (LOCAL_FLOOR). Everything is logged
+/// into the compositor's swapchain at the headset's rate, turning cubes in
+/// front of the user (LOCAL_FLOOR), and the controllers: a cube at each grip
+/// whose colour follows grip and trigger, a ray from each aim pose, a haptic
+/// pulse when a grip is pressed. Everything is logged
 /// (`[openxr_example]` lines; the bridge logs under the logcat tag LuminaOpenXR).
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +47,10 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
   FilamentMaterialProvider? _materials;
   FilamentAssetLoader? _loader;
   final _cubes = <_Cube>[];
+  final _origin = LuminaXROriginActor();
+  late final OpenXrInputSystem _input = OpenXrInputSystem.forOrigin(_native.input, _origin);
+  OpenXrControllerVisuals? _visuals;
+  int _pulses = 0;
   final _lights = <int>[];
   Timer? _poll;
   final _lines = <String>[];
@@ -66,7 +70,12 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
     _session
       ..onSessionBegan = _startRendering
       ..onSessionEnding = _stopRendering
-      ..onExitRequested = () => _log('the runtime asked the app to quit');
+      ..onExitRequested = (() => _log('the runtime asked the app to quit'))
+      ..onInteractionProfileChanged = () {
+        _input.refreshInteractionProfiles();
+        _log('interaction profiles: left ${_input.interactionProfile(LuminaXRHand.left)}, '
+            'right ${_input.interactionProfile(LuminaXRHand.right)}');
+      };
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
@@ -100,10 +109,14 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
       _buildScene(renderer);
       _log('renderer ${renderer.width}x${renderer.height}, multiview ${renderer.multiview}, GPU ${renderer.engine.gpuName}');
     }
+    _input.baseSpaceType = _session.referenceSpaceType;
+    final inputResult = _input.setup();
+    _log('input ${inputResult.name}: profiles suggested ${_native.input.suggestedProfiles.join(', ')}');
     final loop = OpenXrFrameLoop(
       pacer: OpenXrNativePacer(_native, blendMode: OpenXrBlendMode.opaque),
       renderer: renderer ?? _EmptyRenderer(),
       onFrame: _tick,
+      input: inputResult.isSuccess ? _input : null,
     );
     _loop = loop;
     loop.start();
@@ -138,7 +151,7 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
       (vm.Vector3(0, 0.6, -1.0), 0.12, [0.9, 0.9, 0.9, 1.0], 0.5),
     ];
     for (final (position, size, color, spin) in placements) {
-      final asset = loader.createAsset(cubeGlb(size: size, color: color));
+      final asset = loader.createAsset(openXrCubeGlb(size: size, color: color));
       if (asset == null) continue;
       final resources = FilamentResourceLoader.create(engine: engine);
       resources.loadResources(asset);
@@ -146,6 +159,7 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
       asset.addToScene(r.scene);
       _cubes.add(_Cube(asset, position, spin));
     }
+    _visuals = OpenXrControllerVisuals.create(engine, r.scene);
   }
 
   /// The world tick of this example: the cubes turn; every 5 s the frame stats are logged.
@@ -158,6 +172,14 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
         final m = vm.Matrix4.compose(c.position,
             vm.Quaternion.axisAngle(vm.Vector3(0.3, 1, 0.2).normalized(), t * c.spin), vm.Vector3.all(1));
         transforms.setTransform(c.asset.rootEntity, m.storage);
+      }
+    }
+    final controllers = [_origin.leftController, _origin.rightController];
+    _visuals?.update(controllers);
+    for (final c in controllers) {
+      if (c.gripAxis.justPressed) {
+        c.playHapticPulse(amplitude: 0.6, seconds: 0.05);
+        _log('pulse ${++_pulses} on ${c.hand.name} (grip ${c.gripAxis.value.toStringAsFixed(2)})');
       }
     }
     final now = _clock.elapsedMilliseconds;
@@ -178,6 +200,12 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
         'Dart CPU ${cpuMs.toStringAsFixed(2)} ms, GPU ${gpuMs.toStringAsFixed(2)} ms, '
         'period ${(stats.period.inMicroseconds / 1000).toStringAsFixed(2)} ms, total ${stats.frames}, '
         'late ${loop.lateFrames}, missed ${stats.missed}, layers ${_native.renderedFrames}, skipped ${renderer?.skipped ?? 0}');
+    for (final c in controllers) {
+      _log('${c.hand.name}: tracked ${c.isTracked}, grip ${c.gripAxis.value.toStringAsFixed(2)}, '
+          'trigger ${c.triggerAxis.value.toStringAsFixed(2)}, stick (${c.thumbstick.x.toStringAsFixed(2)}, '
+          '${c.thumbstick.y.toStringAsFixed(2)}), at ${c.location.storage.map((v) => v.toStringAsFixed(1)).join(', ')} cm, '
+          'profile ${_input.interactionProfile(c.hand)}');
+    }
     _reportedFrames = loop.frames;
     _reportedRendered = loop.renderedFrames;
     _lastReportMs = now;
@@ -188,6 +216,8 @@ class _OpenXrExampleAppState extends State<OpenXrExampleApp> {
     _loop = null;
     final r = _renderer;
     if (r != null) {
+      _visuals?.dispose();
+      _visuals = null;
       for (final c in _cubes) {
         c.asset.removeFromScene(r.scene);
         _loader?.destroyAsset(c.asset);

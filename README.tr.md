@@ -53,7 +53,7 @@ Tablo şu an neyin çalıştığını gösteriyor.
 | `xrCreateInstance` / `xrCreateSession`, `XR_KHR_vulkan_enable2` ile Vulkan cihazı, olay sorgulama ve olaylarla ilerleyen oturum durum makinesi, `xrLocateSpace` / `xrLocateViews` | tamam (Quest 3S: 72 Hz'de FOCUSED) |
 | Kare döngüsü (yerel bir zamanlayıcı iş parçacığında `xrWaitFrame`, bir renderer bağlanana kadar boş kareler) | tamam |
 | Çalışma zamanının Vulkan cihazında swapchain, iki gözü (multiview) ona render eden Filament, projeksiyon katmanıyla kare gönderimi; `OpenXrFrameLoop`, `LuminaXRWorldDriver` | tamam (Quest 3S: 72 Hz, < %0,1 geç kare) |
-| Aksiyonların etkileşim profillerine bağlanması (`xrSuggestInteractionProfileBindings`, `xrSyncActions`), gerçek titreşim | planlandı |
+| Etkileşim profili başına bağlanan aksiyonlar (Touch Plus, Touch, simple controller), her karede `xrSyncActions`, öngörülen gösterim zamanında grip / aim pozları, çalışma zamanında titreşim; `OpenXrInputSystem`, XR tuşları, Blueprint düğümleri | tamam (Quest 3S: aksiyonlar bağlı, pozlar 72 Hz'de izleniyor) |
 | Android (bağımsız Meta Quest) yerel yolu: Maven Central'dan Khronos yükleyicisi, Kotlin parçasının (`OpenXrPlugin`) ilettiği activity | tamam |
 | `package:lumina_plugin_openxr/runtime.dart`: bir oyunun içe aktardığı, editör kodu içermeyen kütüphane | tamam |
 
@@ -92,17 +92,44 @@ Tablo şu an neyin çalıştığını gösteriyor.
 |---|---|---|
 | `LuminaXROriginActor` | `LuminaActor` | Dünyadaki oyun alanı. `hmdComponent`, `leftController` ve `rightController`'ı oluşturup köküne bağlar; `trackingOrigin`; `recenter()` başı orijine sıfırlar. |
 | `LuminaXRHMDComponent` | `LuminaSceneComponent` | Baş. `updatePoseFromOpenXr(position, orientation)` OpenXR pozu, `updatePoseLumina(location, rotation)` Lumina pozu alır; `interPupillaryDistance` (metre, varsayılan 0.064); IPD'den türetilen `leftEyeLocation` / `rightEyeLocation`. |
-| `LuminaXRControllerComponent` | `LuminaSceneComponent` | Bir `LuminaXRHand` için hareket kontrolcüsü. `updatePoseFromOpenXr` ile grip pozu (`location` / `rotation`) ve aim pozu (`aimLocation` / `aimRotation`); `trigger`, `grip` (eksen), `thumbstick` (2B), `primaryButton`, `secondaryButton`, `menuButton`; `playHapticPulse(amplitude, durationMicroseconds, frequencyHz)` isteği `lastHapticPulse`'a kaydeder. |
+| `LuminaXRControllerComponent` | `LuminaSceneComponent` | Bir `LuminaXRHand` için hareket kontrolcüsü. `updatePoseFromOpenXr` ile grip pozu (`location` / `rotation`) ve aim pozu (`aimLocation` / `aimRotation`); `gripAxis`, `triggerAxis` (histerezisli), `thumbstick` (2B), düğmeler, `isTracked`; `playHapticPulse(amplitude:, seconds:, frequencyHz:)` çalışma zamanına gider. Bir `LuminaGrabber`. |
 | `LuminaXRHand` | enum | `left`, `right` (`isLeft`, `isRight`). |
 
 ### Girdi
 
-- `OpenXrButtonState` (`isPressed`, `isTouched`, `justPressed`, `justReleased`), `OpenXrAxisState` (0..1,
-  `delta` ile), `OpenXrVector2State` (eksen başına −1..1), `OpenXrHapticFeedback`, `OpenXrActionType`.
-- `OpenXrActionSet` iki el için standart kontrolcü aksiyonlarını toplar (tetikler, grip'ler, analog çubuklar,
-  A/B/X/Y, menü düğmeleri).
-- `OpenXrInteractionProfiles` standart profilleri adlandırır: Khronos simple controller, Oculus Touch, Valve Index,
-  HTC Vive, Microsoft motion controller.
+- **Aksiyon kümesi ve bağlamalar.** `lib/src/input/bindings.json` (`tool/embed_bindings.dart` gömer;
+  `OpenXrInputBindings.defaults` olarak okunur) `gameplay` aksiyon kümesini tanımlar: `grip_pose`, `aim_pose`, `grip`
+  (sıkma değeri), `trigger`, `trigger_touch`, `thumbstick`, `thumbstick_click`, `primary` (X / A), `secondary` (Y / B),
+  `menu`, `haptic`; ve bağlamalarını: `/interaction_profiles/meta/touch_controller_plus` (Quest 3 / 3S; yalnızca
+  instance'ta `XR_META_touch_controller_plus` varsa önerilir, oturum bunu ister), `oculus/touch_controller` (her
+  çalışma zamanının bildiği yedek) ve `khr/simple_controller` (`select/click` → `trigger`). Çalışma zamanının
+  reddettiği profil atlanır.
+- **`OpenXrInputSystem`** (bir `LuminaWorldSubsystem`): `setup()` aksiyonları oluşturur, bağlamaları önerir, bağlar
+  ve grip ile aim aksiyon uzaylarını oluşturur; `sync(displayTime)` (`OpenXrFrameLoop.input` dünya tick'inden önce
+  çağırır) `xrSyncActions` çalıştırır, iki pozu karenin öngörülen gösterim zamanında konumlar ve kontrolcü
+  bileşenlerine yazar; `attachTo(world)` onu kaydeder, böylece XR tuşları dünyanın `LuminaInputSubsystem`'ine ulaşır
+  ve Blueprint düğümleri onu bulur. `refreshInteractionProfiles()` (`OpenXrSession.onInteractionProfileChanged`'e
+  bağlayın) her elin kullandığı profili günlüğe yazar.
+- **`LuminaXRControllerComponent`**: grip pozu (`location` / `rotation`, çalışma zamanı eksenleri, cm), aim pozu
+  (`aimLocation` / `aimRotation`, `aimWorldLocation` / `aimWorldRotation`), `gripAxis` / `triggerAxis` (0..1,
+  histerezisli: 0,7 üstünde basılı, 0,3 altında bırakılmış, `justPressed` / `justReleased`), `thumbstick`,
+  `primaryButton`, `secondaryButton`, `menuButton`, `thumbstickButton`, `triggerTouched`, `isTracked` (izlenmeyen
+  kontrolcü son pozunu korur). `playHapticPulse(amplitude:, seconds:, frequencyHz:)` çalışma zamanına gider
+  (`xrApplyHapticFeedback`; 0 sn en kısa darbe, 0 Hz frekansı çalışma zamanına bırakır). Bir `LuminaGrabber`'dır
+  (`id` `left` / `right`, birim ölçekli `worldTransform`, `grip`, aim pozu boyunca `ray`, `pulse`); böylece
+  `LuminaPoseGrabInteractor` onu fare gibi kullanır.
+- **Proje girdisi.** XR tuşları (`XR_Left_Grip`, `XR_Left_Trigger`, `XR_Left_Thumbstick_X` / `_Y`,
+  `XR_Left_Thumbstick_Click`, `XR_Left_X`, `XR_Left_Y`, `XR_Left_Menu`, `XR_Right_Grip`, `XR_Right_Trigger`,
+  `XR_Right_Thumbstick_X` / `_Y`, `XR_Right_Thumbstick_Click`, `XR_Right_A`, `XR_Right_B`) birer `LuminaKey`'dir;
+  Project Settings bunları *XR Controllers* altında listeler, bir girdi aksiyonu onları herhangi bir tuş gibi bağlar.
+  Grip, tetik ve analog çubuk eksenleri analog, düğmeler dijitaldir.
+- **Blueprint düğümleri** (*XR | Controllers* kategorisi; `attachTo` ya da `OpenXrBlueprintNodes.register()` kaydeder):
+  Get Controller Grip Transform, Get Controller Aim Transform (dünya, yazım eksenleri), Get Grip Value, Get Trigger
+  Value, Is Controller Tracked, Play Haptic Pulse (el, genlik, saniye, frekans). El `Left` ya da `Right`'tır.
+- **`OpenXrControllerVisuals`**: bir Filament sahnesi için hata ayıklama görselleri: her grip'te rengi grip ve tetiği
+  izleyen bir küp, her aim pozu boyunca bir ışın.
+- `OpenXrButtonState`, `OpenXrAxisState`, `OpenXrVector2State`, `OpenXrHapticFeedback`, `OpenXrActionType`;
+  `OpenXrInteractionProfiles` profilleri adlandırır.
 
 ### Stereo çizim
 
@@ -138,7 +165,7 @@ hizasında. Asimetrik FOV'lu göz görünümleri verir (`getLeftEyeView()`, `get
 |---|---|---|---|
 | Windows (PC VR) | `XR_RUNTIME_JSON`, kayıt defteri | `openxr_loader.dll` (arama yolu ya da manifestin yanı) | Ana hedef. |
 | Linux | `XR_RUNTIME_JSON` | `libopenxr_loader.so`, `.so.1` | `XR_RUNTIME_JSON`'u ayarlayın (ör. Monado'nun manifesti); varsayılan `/etc/xdg/openxr/1/active_runtime.json` henüz okunmuyor. |
-| Android (Meta Quest) | — | — | Köprü kütüphanesi Android'de açılmıyor; benzetimli arka uç kullanılır. |
+| Android (Meta Quest) | çalışma zamanı aracısı | Khronos yükleyici AAR'ı (Maven Central, derlemede indirilir) | Quest 3S'te doğrulandı: oturum, 72 Hz kare döngüsü, kontrolcüler. |
 | macOS | — | — | OpenXR çalışma zamanı yok; yalnızca benzetimli arka uç. |
 
 ## Kurulum
@@ -218,32 +245,21 @@ void startXr() {
 
 ### Baş ve kontrolcüleri her karede sürmek
 
-Bileşenler OpenXR pozlarını (metre, Y yukarı) alır ve Lumina dönüşümlerini (santimetre, Z yukarı) saklar. Benzetimli
-arka uçla:
+Bunu `OpenXrFrameLoop` yapar: her karede görünümler rig'e gider (`LuminaXRWorldDriver`), girdi sistemi kontrolcüleri
+karenin öngörülen gösterim zamanında eşitler, sonra dünya tick'lenir. Kare döngüsü olmadan (bir test, bir araç)
+`OpenXrInputSystem.sync`'i kendiniz çağırın. Benzetimli arka uçla:
 
 ```dart
-final sim = OpenXrBindings.instance.simulator;
+final sim = OpenXrBindings.instance.simulator..initialize();
+final origin = LuminaXROriginActor();
+final input = OpenXrInputSystem.forOrigin(sim.input, origin)..setup();
+input.attachTo(world); // XR tuşları dünyanın girdisine, Blueprint XR düğümleri
 
-void tick(LuminaXROriginActor origin, OpenXrSession session) {
-  session.pollEvents();
+sim.setControllerInputs(isLeft: false, trigger: 0.9, primaryButton: true);
+input.sync(displayTimeNs);
 
-  origin.hmdComponent.updatePoseFromOpenXr(sim.headPosition, sim.headOrientation);
-  origin.leftController.updatePoseFromOpenXr(
-    openXrGripPos: sim.leftGripPosition,
-    openXrGripRot: sim.leftGripOrientation,
-  );
-  origin.rightController
-    ..updatePoseFromOpenXr(
-      openXrGripPos: sim.rightGripPosition,
-      openXrGripRot: sim.rightGripOrientation,
-    )
-    ..trigger.update(sim.rightTrigger)
-    ..primaryButton.update(sim.rightPrimaryButton);
-
-  if (origin.rightController.primaryButton.justPressed) {
-    origin.rightController.playHapticPulse(amplitude: 0.6, durationMicroseconds: 20000);
-  }
-}
+final right = origin.rightController;
+if (right.triggerAxis.justPressed) right.playHapticPulse(amplitude: 0.6, seconds: 0.05);
 ```
 
 ### Filament için göz başına projeksiyon
@@ -469,7 +485,13 @@ flutter test test/openxr_frame_loop_test.dart
 flutter test test/openxr_eye_camera_test.dart
 flutter test test/xr_world_driver_test.dart
 flutter test test/openxr_multiview_choice_test.dart
+flutter test test/openxr_bindings_test.dart
+flutter test test/openxr_input_hysteresis_test.dart
+flutter test test/openxr_input_system_test.dart
+flutter test test/openxr_haptics_test.dart
+flutter test test/openxr_blueprint_nodes_test.dart
 dart run tool/smoke_report.dart test/smoke/openxr_frame_loop_smoke_test.dart --no-dashboard
+dart run tool/smoke_report.dart test/smoke/openxr_input_smoke_test.dart --no-dashboard
 flutter analyze
 ```
 
@@ -505,13 +527,11 @@ olarak çalıştırır (`../openxr` değilse `LUMINA_OPENXR_DIR`'i ayarlayın).
 - Yalnızca multiview düzeni render ediliyor; göz başına geri düşüş (iki swapchain, iki view) `OpenXrStereoLayout`
   tarafından seçiliyor ama henüz çizilmiyor. Quest 3S multiview destekliyor.
 - İstenen bir yenileme hızı (`requestDisplayRefreshRate(90)`) kabul edildi, ancak kimse takmıyorken Quest 72 Hz'de kaldı.
-- `OpenXrActionSet.sync()` henüz çalışma zamanını okumuyor; kontrolcü durumlarını çağıran doldurur.
-  `playHapticPulse` isteği (`lastHapticPulse`) kaydeder ama bir cihaza göndermez.
 - OpenXR panelinde seçilen stereo modu henüz eklentinin `OpenXrFilamentBridge`'ine aktarılmıyor.
 - Yerel yol geliştirilirken bir PC çalışma zamanı yoktu; masaüstü köprüsü derleniyor ve bir çalışma zamanını aynı
   şekilde buluyor, ancak yalnızca Quest üzerinde çalıştı.
 
-Sıradakiler: gerçek titreşimle etkileşim profili başına aksiyon bağlamaları, ardından passthrough.
+Sıradakiler: passthrough (metaxr), el izleme.
 
 ## Katkı
 

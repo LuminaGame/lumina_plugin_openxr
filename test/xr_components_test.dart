@@ -58,10 +58,10 @@ void main() {
       expect(controller.location.z, closeTo(-40.0, 0.01));
 
       // Play haptic pulse
-      controller.playHapticPulse(amplitude: 0.75, durationMicroseconds: 50000);
+      controller.playHapticPulse(amplitude: 0.75, seconds: 0.05);
       expect(controller.lastHapticPulse, isNotNull);
       expect(controller.lastHapticPulse!.amplitude, closeTo(0.75, 0.001));
-      expect(controller.lastHapticPulse!.durationMicroseconds, equals(50000));
+      expect(controller.lastHapticPulse!.durationNanoseconds, equals(50000000));
     });
   });
 }

@@ -52,7 +52,7 @@ Quest 3S. The table says what works now.
 | `xrCreateInstance` / `xrCreateSession`, the Vulkan device through `XR_KHR_vulkan_enable2`, event polling and the event-driven session state machine, `xrLocateSpace` / `xrLocateViews` | done (Quest 3S: FOCUSED at 72 Hz) |
 | The frame loop (`xrWaitFrame` on a native pacer thread, empty frames until a renderer attaches) | done |
 | Swapchain on the runtime's Vulkan device, Filament rendering both eyes (multiview) into it, frame submission with a projection layer; `OpenXrFrameLoop`, `LuminaXRWorldDriver` | done (Quest 3S: 72 Hz, < 0.1 % late frames) |
-| Action binding to interaction profiles (`xrSuggestInteractionProfileBindings`, `xrSyncActions`), real haptics | planned |
+| Actions bound per interaction profile (Touch Plus, Touch, simple controller), `xrSyncActions` each frame, grip / aim poses at the predicted display time, haptics on the runtime; `OpenXrInputSystem`, XR keys, Blueprint nodes | done (Quest 3S: actions attached, poses tracked at 72 Hz) |
 | Android (Meta Quest standalone) native path: the Khronos loader from Maven Central, the activity handed over by the Kotlin part (`OpenXrPlugin`) | done |
 | `package:lumina_plugin_openxr/runtime.dart`: the library a game imports, free of editor code | done |
 
@@ -90,17 +90,43 @@ Quest 3S. The table says what works now.
 |---|---|---|
 | `LuminaXROriginActor` | `LuminaActor` | The play space in the world. Creates and attaches `hmdComponent`, `leftController` and `rightController` to its root; `trackingOrigin`; `recenter()` resets the head to the origin. |
 | `LuminaXRHMDComponent` | `LuminaSceneComponent` | The head. `updatePoseFromOpenXr(position, orientation)` takes an OpenXR pose, `updatePoseLumina(location, rotation)` a Lumina one; `interPupillaryDistance` (metres, 0.064 default); `leftEyeLocation` / `rightEyeLocation` derived from the IPD. |
-| `LuminaXRControllerComponent` | `LuminaSceneComponent` | A motion controller for one `LuminaXRHand`. Grip pose (`location` / `rotation`) and aim pose (`aimLocation` / `aimRotation`) via `updatePoseFromOpenXr`; `trigger`, `grip` (axis), `thumbstick` (2D), `primaryButton`, `secondaryButton`, `menuButton`; `playHapticPulse(amplitude, durationMicroseconds, frequencyHz)` records the request in `lastHapticPulse`. |
+| `LuminaXRControllerComponent` | `LuminaSceneComponent` | A motion controller for one `LuminaXRHand`. Grip pose (`location` / `rotation`) and aim pose (`aimLocation` / `aimRotation`) via `updatePoseFromOpenXr`; `gripAxis`, `triggerAxis` (hysteresis), `thumbstick` (2D), the buttons, `isTracked`; `playHapticPulse(amplitude:, seconds:, frequencyHz:)` goes to the runtime. A `LuminaGrabber`. |
 | `LuminaXRHand` | enum | `left`, `right` (`isLeft`, `isRight`). |
 
 ### Input
 
-- `OpenXrButtonState` (`isPressed`, `isTouched`, `justPressed`, `justReleased`), `OpenXrAxisState` (0..1 with
-  `delta`), `OpenXrVector2State` (−1..1 per axis), `OpenXrHapticFeedback`, `OpenXrActionType`.
-- `OpenXrActionSet` groups the standard controller actions for both hands (triggers, grips, thumbsticks, A/B/X/Y,
-  menu buttons).
-- `OpenXrInteractionProfiles` names the standard profiles: Khronos simple controller, Oculus Touch, Valve Index,
-  HTC Vive, Microsoft motion controller.
+- **Action set and bindings.** `lib/src/input/bindings.json` (embedded by `tool/embed_bindings.dart`; read it as
+  `OpenXrInputBindings.defaults`) defines the action set `gameplay`: `grip_pose`, `aim_pose`, `grip` (squeeze value),
+  `trigger`, `trigger_touch`, `thumbstick`, `thumbstick_click`, `primary` (X / A), `secondary` (Y / B), `menu`,
+  `haptic`, and their bindings for `/interaction_profiles/meta/touch_controller_plus` (Quest 3 / 3S; suggested only
+  when the instance has `XR_META_touch_controller_plus`, which the session asks for), `oculus/touch_controller` (the
+  fallback every runtime knows) and `khr/simple_controller` (`select/click` → `trigger`). A profile the runtime refuses
+  is skipped.
+- **`OpenXrInputSystem`** (a `LuminaWorldSubsystem`): `setup()` creates the actions, suggests the bindings, attaches
+  them and creates the grip and aim action spaces; `sync(displayTime)` (called by `OpenXrFrameLoop.input` before the
+  world ticks) runs `xrSyncActions`, locates both poses at the frame's predicted display time and writes the
+  controller components; `attachTo(world)` registers it, so the XR keys reach the world's `LuminaInputSubsystem` and
+  the Blueprint nodes find it. `refreshInteractionProfiles()` (wire it to `OpenXrSession.onInteractionProfileChanged`)
+  logs the profile each hand uses.
+- **`LuminaXRControllerComponent`**: grip pose (`location` / `rotation`, runtime axes, cm), aim pose (`aimLocation` /
+  `aimRotation`, `aimWorldLocation` / `aimWorldRotation`), `gripAxis` / `triggerAxis` (0..1 with hysteresis: pressed
+  above 0.7, released below 0.3, `justPressed` / `justReleased`), `thumbstick`, `primaryButton`, `secondaryButton`,
+  `menuButton`, `thumbstickButton`, `triggerTouched`, `isTracked` (an untracked controller keeps its last pose).
+  `playHapticPulse(amplitude:, seconds:, frequencyHz:)` goes to the runtime (`xrApplyHapticFeedback`; 0 s is the
+  shortest pulse, 0 Hz lets the runtime pick). It is a `LuminaGrabber` (`id` `left` / `right`, `worldTransform` with
+  unit scale, `grip`, `ray` along the aim pose, `pulse`), so `LuminaPoseGrabInteractor` takes it as it takes the mouse.
+- **Project input.** The XR keys (`XR_Left_Grip`, `XR_Left_Trigger`, `XR_Left_Thumbstick_X` / `_Y`,
+  `XR_Left_Thumbstick_Click`, `XR_Left_X`, `XR_Left_Y`, `XR_Left_Menu`, `XR_Right_Grip`, `XR_Right_Trigger`,
+  `XR_Right_Thumbstick_X` / `_Y`, `XR_Right_Thumbstick_Click`, `XR_Right_A`, `XR_Right_B`) are `LuminaKey`s; Project
+  Settings lists them under *XR Controllers*, so an input action binds them like any key. Grip, trigger and the
+  thumbstick axes are analog, the buttons digital.
+- **Blueprint nodes** (category *XR | Controllers*, registered by `attachTo` or `OpenXrBlueprintNodes.register()`):
+  Get Controller Grip Transform, Get Controller Aim Transform (world, authoring axes), Get Grip Value, Get Trigger
+  Value, Is Controller Tracked, Play Haptic Pulse (hand, amplitude, seconds, frequency). Hand is `Left` or `Right`.
+- **`OpenXrControllerVisuals`**: debug visuals for a Filament scene: a cube at each grip (its colour follows grip and
+  trigger) and a ray along each aim pose.
+- `OpenXrButtonState`, `OpenXrAxisState`, `OpenXrVector2State`, `OpenXrHapticFeedback`, `OpenXrActionType`;
+  `OpenXrInteractionProfiles` names the profiles.
 
 ### Stereo rendering
 
@@ -137,7 +163,7 @@ angles (`setHeadLookAngles(yaw, pitch)`), controller poses (`setControllerPose`)
 |---|---|---|---|
 | Windows (PC VR) | `XR_RUNTIME_JSON`, registry | `openxr_loader.dll` (search path or next to the manifest) | Main target. |
 | Linux | `XR_RUNTIME_JSON` | `libopenxr_loader.so`, `.so.1` | Set `XR_RUNTIME_JSON` (for example to Monado's manifest); the `/etc/xdg/openxr/1/active_runtime.json` default is not read yet. |
-| Android (Meta Quest) | — | — | The bridge library is not opened on Android; the simulated backend is used. |
+| Android (Meta Quest) | the runtime broker | the Khronos loader AAR (Maven Central, fetched at build time) | Quest 3S verified: session, frame loop at 72 Hz, controllers. |
 | macOS | — | — | No OpenXR runtimes; simulated backend only. |
 
 ## Installation
@@ -217,32 +243,21 @@ void startXr() {
 
 ### Driving the head and controllers each frame
 
-The components take OpenXR poses (metres, Y-up) and store Lumina transforms (centimetres, Z-up). With the simulated
-backend:
+`OpenXrFrameLoop` does it: each frame the views go to the rig (`LuminaXRWorldDriver`), the input system syncs the
+controllers at the frame's predicted display time, then the world ticks. Without a frame loop (a test, a tool), call
+`OpenXrInputSystem.sync` yourself. With the simulated backend:
 
 ```dart
-final sim = OpenXrBindings.instance.simulator;
+final sim = OpenXrBindings.instance.simulator..initialize();
+final origin = LuminaXROriginActor();
+final input = OpenXrInputSystem.forOrigin(sim.input, origin)..setup();
+input.attachTo(world); // XR keys to the world's input, the Blueprint XR nodes
 
-void tick(LuminaXROriginActor origin, OpenXrSession session) {
-  session.pollEvents();
+sim.setControllerInputs(isLeft: false, trigger: 0.9, primaryButton: true);
+input.sync(displayTimeNs);
 
-  origin.hmdComponent.updatePoseFromOpenXr(sim.headPosition, sim.headOrientation);
-  origin.leftController.updatePoseFromOpenXr(
-    openXrGripPos: sim.leftGripPosition,
-    openXrGripRot: sim.leftGripOrientation,
-  );
-  origin.rightController
-    ..updatePoseFromOpenXr(
-      openXrGripPos: sim.rightGripPosition,
-      openXrGripRot: sim.rightGripOrientation,
-    )
-    ..trigger.update(sim.rightTrigger)
-    ..primaryButton.update(sim.rightPrimaryButton);
-
-  if (origin.rightController.primaryButton.justPressed) {
-    origin.rightController.playHapticPulse(amplitude: 0.6, durationMicroseconds: 20000);
-  }
-}
+final right = origin.rightController;
+if (right.triggerAxis.justPressed) right.playHapticPulse(amplitude: 0.6, seconds: 0.05);
 ```
 
 ### Per-eye projection for Filament
@@ -466,7 +481,13 @@ flutter test test/openxr_frame_loop_test.dart
 flutter test test/openxr_eye_camera_test.dart
 flutter test test/xr_world_driver_test.dart
 flutter test test/openxr_multiview_choice_test.dart
+flutter test test/openxr_bindings_test.dart
+flutter test test/openxr_input_hysteresis_test.dart
+flutter test test/openxr_input_system_test.dart
+flutter test test/openxr_haptics_test.dart
+flutter test test/openxr_blueprint_nodes_test.dart
 dart run tool/smoke_report.dart test/smoke/openxr_frame_loop_smoke_test.dart --no-dashboard
+dart run tool/smoke_report.dart test/smoke/openxr_input_smoke_test.dart --no-dashboard
 flutter analyze
 ```
 
@@ -503,13 +524,11 @@ plugin with its real process (set `LUMINA_OPENXR_DIR` when it is not `../openxr`
   `OpenXrStereoLayout` but not drawn yet. The Quest 3S has multiview.
 - A requested refresh rate (`requestDisplayRefreshRate(90)`) was accepted but the Quest stayed at 72 Hz while nobody
   wore it.
-- `OpenXrActionSet.sync()` does not read the runtime yet; controller states are filled by the caller.
-  `playHapticPulse` records the request (`lastHapticPulse`) without sending it to a device.
 - The stereo mode chosen in the OpenXR panel is not yet pushed to the plugin's `OpenXrFilamentBridge`.
 - No PC runtime was available while the native path was built; the desktop bridge compiles and finds a runtime the
   same way, but has only run on the Quest.
 
-Planned next: action bindings per interaction profile with real haptics, then passthrough.
+Planned next: passthrough (metaxr), hand tracking.
 
 ## Contributing
 

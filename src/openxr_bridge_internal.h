@@ -50,6 +50,13 @@ struct State {
 
     std::vector<Space> spaces;
     int64_t nextSpaceId = 1;
+
+    // Input: action sets and actions (owned by the instance), whether they are
+    // attached to the current session, and the two hands' subaction paths.
+    std::vector<XrActionSet> actionSets;
+    std::vector<XrAction> actions;
+    bool actionSetsAttached = false;
+    XrPath handPaths[2] = {XR_NULL_PATH, XR_NULL_PATH};
 };
 
 State& state();

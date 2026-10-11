@@ -145,9 +145,12 @@ class OpenXrFilamentRenderer implements OpenXrEyeRenderer {
       return false;
     }
     final eyes = OpenXrEyeCamera.fromViews(views, unitsPerMetre: unitsPerMetre, near: near, far: far);
-    camera.modelMatrix = origin;
+    // The camera is the head (so culling looks where the eyes look); the eyes
+    // are relative to it.
+    final head = OpenXrEyeCamera.head(views, unitsPerMetre: unitsPerMetre);
+    camera.modelMatrix = origin.multiplied(head);
     for (var i = 0; i < 2; i++) {
-      camera.setEyeModelMatrix(i, eyes[i].model);
+      camera.setEyeModelMatrix(i, OpenXrEyeCamera.relativeTo(head, eyes[i].model));
     }
     camera.setCustomEyeProjection([eyes[0].projection, eyes[1].projection],
         OpenXrEyeCamera.cullingProjection(views, near: near, far: far),

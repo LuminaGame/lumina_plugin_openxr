@@ -1,6 +1,7 @@
 import 'package:vector_math/vector_math_64.dart' as vm;
 
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/input/openxr_input_backend.dart';
 import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
 
 /// One view of the primary stereo configuration: the image size the runtime
@@ -102,6 +103,9 @@ abstract interface class OpenXrBackend {
 
   /// The two eyes in [baseSpace] (an [OpenXrReferenceSpaceType]) at [displayTime] (ns).
   List<OpenXrEyeView> locateViews(int baseSpace, int displayTime);
+
+  /// The controllers: actions, bindings, per-frame sync, haptics.
+  OpenXrInputBackend get input;
 
   /// Destroys the session and the instance.
   void destroy();

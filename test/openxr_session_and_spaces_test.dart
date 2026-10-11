@@ -48,28 +48,28 @@ void main() {
       expect(roundTrip.z, closeTo(openXrForward.z, 0.001));
     });
 
-    test('OpenXrActionSet tracks button, axis, and vector2 inputs', () {
-      final actions = OpenXrActionSet();
-
+    test('the action states track button, axis, and vector2 inputs', () {
       // Trigger axis
-      expect(actions.leftTrigger.value, equals(0.0));
-      actions.leftTrigger.update(0.85);
-      expect(actions.leftTrigger.value, closeTo(0.85, 0.001));
-      expect(actions.leftTrigger.delta, closeTo(0.85, 0.001));
+      final trigger = OpenXrAxisState();
+      expect(trigger.value, equals(0.0));
+      trigger.update(0.85);
+      expect(trigger.value, closeTo(0.85, 0.001));
+      expect(trigger.delta, closeTo(0.85, 0.001));
 
       // Button press
-      expect(actions.rightPrimary.isPressed, isFalse);
-      actions.rightPrimary.update(true);
-      expect(actions.rightPrimary.isPressed, isTrue);
-      expect(actions.rightPrimary.justPressed, isTrue);
+      final primary = OpenXrButtonState();
+      expect(primary.isPressed, isFalse);
+      primary.update(true);
+      expect(primary.isPressed, isTrue);
+      expect(primary.justPressed, isTrue);
 
-      actions.rightPrimary.update(true);
-      expect(actions.rightPrimary.justPressed, isFalse);
+      primary.update(true);
+      expect(primary.justPressed, isFalse);
 
       // Thumbstick
-      actions.leftThumbstick.update(-0.5, 0.75);
-      expect(actions.leftThumbstick.x, closeTo(-0.5, 0.001));
-      expect(actions.leftThumbstick.y, closeTo(0.75, 0.001));
+      final stick = OpenXrVector2State()..update(-0.5, 0.75);
+      expect(stick.x, closeTo(-0.5, 0.001));
+      expect(stick.y, closeTo(0.75, 0.001));
     });
   });
 }

@@ -35,6 +35,19 @@ class OpenXrEyeCamera {
     ];
   }
 
+  /// The head of [views] (world units): midway between the eyes, oriented
+  /// like the first. The camera sits there, so Filament culls from the head
+  /// (with [cullingProjection]) and each eye's model matrix is relative to it
+  /// ([relativeTo]).
+  static vm.Matrix4 head(List<OpenXrEyeView> views, {double unitsPerMetre = 1}) {
+    if (views.isEmpty) return vm.Matrix4.identity();
+    final centre = views.fold(vm.Vector3.zero(), (vm.Vector3 a, v) => a + v.position) / views.length.toDouble();
+    return vm.Matrix4.compose(centre * unitsPerMetre, views.first.orientation.normalized(), vm.Vector3.all(1));
+  }
+
+  /// [eye] (a model matrix in the tracking space) relative to [head].
+  static vm.Matrix4 relativeTo(vm.Matrix4 head, vm.Matrix4 eye) => vm.Matrix4.inverted(head).multiplied(eye);
+
   /// A projection enclosing every eye's frustum (for culling both eyes in one
   /// pass): the widest angle on each side.
   static vm.Matrix4 cullingProjection(List<OpenXrEyeView> views, {double near = 0.05, double far = 1000}) {

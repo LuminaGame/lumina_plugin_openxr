@@ -379,6 +379,7 @@ int32_t openxr_bridge_destroy_session(void) {
         if (space.handle != XR_NULL_HANDLE) fn<PFN_xrDestroySpace>("xrDestroySpace")(space.handle);
     }
     s.spaces.clear();
+    s.actionSetsAttached = false;
     if (s.session == XR_NULL_HANDLE) return XR_SUCCESS;
     XrResult r = fn<PFN_xrDestroySession>("xrDestroySession")(s.session);
     s.session = XR_NULL_HANDLE;
@@ -403,6 +404,10 @@ int32_t openxr_bridge_destroy_instance(void) {
     s.instance = XR_NULL_HANDLE;
     s.system = XR_NULL_SYSTEM_ID;
     s.enabledExtensions.clear();
+    // xrDestroyInstance destroyed the action sets and actions with it.
+    s.actionSets.clear();
+    s.actions.clear();
+    s.handPaths[0] = s.handPaths[1] = XR_NULL_PATH;
     return r;
 }
 

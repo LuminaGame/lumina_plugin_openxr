@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/input/openxr_input_system.dart';
 
 /// One frame the runtime handed out: its index, the predicted display time
 /// (ns) the poses are located for, and whether the runtime wants it rendered.
@@ -45,12 +46,13 @@ class OpenXrFrameTiming {
 
 /// The XR frame loop on the UI isolate. The pacer waits for each frame off
 /// this isolate; here the views are located and handed to [onViews] (the rig
-/// components take this frame's poses), the world ticks ([onFrame], with the
-/// runtime's delta, so gameplay reads current poses) and the renderer draws
-/// both eyes. A frame the runtime does not want rendered still ticks and is
-/// ended empty.
+/// components take this frame's poses), the controllers are synced ([input]:
+/// `xrSyncActions`, grip and aim located at the same predicted display
+/// time), the world ticks ([onFrame], with the runtime's delta, so gameplay
+/// reads current poses) and the renderer draws both eyes. A frame the
+/// runtime does not want rendered still syncs, ticks and is ended empty.
 class OpenXrFrameLoop {
-  OpenXrFrameLoop({required this.pacer, required this.renderer, this.onFrame, this.historyLength = 600});
+  OpenXrFrameLoop({required this.pacer, required this.renderer, this.onFrame, this.input, this.historyLength = 600});
 
   final OpenXrFramePacer pacer;
   final OpenXrEyeRenderer renderer;
@@ -60,6 +62,9 @@ class OpenXrFrameLoop {
 
   /// Called with the views before they are rendered (rig components read them).
   void Function(OpenXrFrame frame, List<OpenXrEyeView> views)? onViews;
+
+  /// The controllers, synced each frame before [onFrame].
+  OpenXrInputSystem? input;
 
   final int historyLength;
   final Queue<OpenXrFrameTiming> _history = Queue();
@@ -93,6 +98,7 @@ class OpenXrFrameLoop {
     _lastDisplayTime = frame.predictedDisplayTime;
     final views = frame.shouldRender ? pacer.views(frame) : const <OpenXrEyeView>[];
     if (views.length == 2) onViews?.call(frame, views);
+    input?.sync(frame.predictedDisplayTime);
     onFrame?.call(interval / 1e9, frame);
     final rendered = views.length == 2 && renderer.render(frame, views);
     pacer.ended(frame, rendered: rendered);

@@ -25,16 +25,34 @@ class OpenXrButtonState {
   }
 }
 
-/// Single-axis analog trigger/grip input state [0.0..1.0].
+/// Single-axis analog trigger/grip input state [0.0..1.0], with a pressed
+/// state through hysteresis: pressed above [pressThreshold], released below
+/// [releaseThreshold], unchanged in between (a half-held grip does not
+/// flicker).
 class OpenXrAxisState {
+  OpenXrAxisState({this.pressThreshold = 0.7, this.releaseThreshold = 0.3});
+
+  final double pressThreshold;
+  final double releaseThreshold;
+
   double value = 0.0;
   double previousValue = 0.0;
+  bool isPressed = false;
+  bool wasPressed = false;
 
   double get delta => value - previousValue;
+  bool get justPressed => isPressed && !wasPressed;
+  bool get justReleased => !isPressed && wasPressed;
 
   void update(double newValue) {
     previousValue = value;
     value = newValue.clamp(0.0, 1.0);
+    wasPressed = isPressed;
+    if (!isPressed && value > pressThreshold) {
+      isPressed = true;
+    } else if (isPressed && value < releaseThreshold) {
+      isPressed = false;
+    }
   }
 }
 
@@ -53,15 +71,20 @@ class OpenXrVector2State {
   }
 }
 
-/// Haptic vibration pulse configuration.
+/// A haptic vibration pulse: amplitude 0..1, duration in seconds, frequency
+/// in Hz (0: the runtime picks it).
 class OpenXrHapticFeedback {
   final double amplitude;
-  final int durationMicroseconds;
+  final double seconds;
   final double frequencyHz;
 
   const OpenXrHapticFeedback({
     this.amplitude = 1.0,
-    this.durationMicroseconds = 25000, // 25ms default pulse
-    this.frequencyHz = 160.0,
+    this.seconds = 0.025,
+    this.frequencyHz = 0.0,
   });
+
+  /// The duration in nanoseconds as OpenXR takes it; -1
+  /// (`XR_MIN_HAPTIC_DURATION`) for a zero or negative duration.
+  int get durationNanoseconds => seconds <= 0 ? -1 : (seconds * 1e9).round();
 }

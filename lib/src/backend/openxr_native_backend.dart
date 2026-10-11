@@ -7,6 +7,7 @@ import 'package:vector_math/vector_math_64.dart' as vm;
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bridge_ffi.dart' as b;
 import 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
+import 'package:lumina_plugin_openxr/src/input/openxr_native_input.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
 
@@ -71,6 +72,9 @@ class OpenXrNativeBackend implements OpenXrBackend {
   OpenXrNativeBackend();
 
   final Map<int, int> _spaces = {};
+
+  @override
+  late final OpenXrNativeInput input = OpenXrNativeInput(this);
   List<OpenXrViewConfiguration> _views = const [];
   List<int> _blendModes = const [];
   OpenXrVulkanDevice? _vulkan;
@@ -336,12 +340,14 @@ class OpenXrNativeBackend implements OpenXrBackend {
   /// Destroys the session (its spaces, the frame loop) only.
   void destroySession() {
     _spaces.clear();
+    input.forget();
     OpenXrErrorReporter.guard('destroySession', b.openxr_bridge_destroy_session, 0);
   }
 
   @override
   void destroy() {
     _spaces.clear();
+    input.forget(instance: true);
     _vulkan = null;
     OpenXrErrorReporter.guard('destroy', () {
       b.openxr_bridge_destroy_session();
