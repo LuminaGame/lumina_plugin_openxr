@@ -28,7 +28,7 @@ class LuminaPluginOpenxrPlugin extends LuminaEditorPlugin {
 
   /// The OpenXR panel the plugin process registers
   /// (`PluginProcessViewPanel`); commands run without a `BuildContext` show it.
-  static const String panelId = OpenXrController.panelId;
+  static const String panelId = 'panel.lumina_plugin_openxr.status';
 
   /// The About text, shown in the About dialog and the OpenXR panel.
   static const String aboutText = OpenXrController.aboutText;

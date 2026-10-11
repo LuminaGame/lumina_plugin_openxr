@@ -10,7 +10,7 @@
     "Lumina"
   ],
   "engine_version": ">=0.0.1 <1.0.0",
-  "can_contain_content": false,
+  "can_contain_content": true,
   "isolation": "process",
   "modules": [
     {

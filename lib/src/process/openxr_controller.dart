@@ -11,8 +11,8 @@ typedef OpenXrLog = void Function(String message, String level);
 /// the tracking origin, the stereo mode, the VR preview session, the status
 /// button state and the `get_status` JSON.
 ///
-/// `LuminaPluginOpenxrProcess` serves it to the editor; the in-process
-/// `LuminaPluginOpenxrPlugin` wraps it for a Flutter host.
+/// `LuminaPluginOpenxrProcess` serves it to the editor and its OpenXR panel
+/// (the editor panel Widget Blueprint `content/Editor/EPW_OpenXR.lmas`).
 class OpenXrController {
   OpenXrController({OpenXrBindings? bindings}) : bindings = bindings ?? OpenXrBindings.instance {
     session = OpenXrSession(bindings: this.bindings);
@@ -24,11 +24,7 @@ class OpenXrController {
   static const String friendlyName = 'OpenXR Support';
   static const String version = '0.1.0';
 
-  /// The OpenXR panel (`PluginProcessViewPanel`); commands that would open a
-  /// dialog show it.
-  static const String panelId = 'panel.lumina_plugin_openxr.status';
-
-  /// The About text, shown in the About dialog and the OpenXR panel.
+  /// The About text (the OpenXR panel's About section shows it).
   static const String aboutText = 'Khronos OpenXR 1.0/1.1 runtime management, stereoscopic rendering bridge for '
       'Filament, and XR origin/controller tracking components.\nVersion: $version';
 
@@ -152,6 +148,7 @@ class OpenXrController {
         'active_runtime': bindings.activeRuntimeName,
         'manifest_path': bindings.activeRuntimePath,
         'is_simulated': bindings.isSimulated,
+        'simulation_forced': bindings.isSimulationForced,
         'native_runtime_available': bindings.isNativeRuntimeAvailable,
         'session_state': session.state.name,
         'tracking_origin': session.trackingOrigin.name,

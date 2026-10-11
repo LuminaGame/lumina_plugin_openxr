@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:lumina_plugin_process/lumina_plugin_process.dart';
 
+import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 import 'package:lumina_plugin_openxr/src/process/openxr_controller.dart';
-import 'package:lumina_plugin_openxr/src/process/openxr_status_view.dart';
+import 'package:lumina_plugin_openxr/src/process/openxr_panel.dart';
 
 /// The OpenXR plugin's own process (`.lmplugin` `process_class`): the OpenXR
 /// loader bridge (FFI), the session and every runtime query live in this
@@ -12,16 +13,21 @@ import 'package:lumina_plugin_openxr/src/process/openxr_status_view.dart';
 /// offers Restart.
 ///
 /// It contributes the Plugins/OpenXR menu items, the status bar button with
-/// its live state and menu, the `get_status` MCP tool and the OpenXR panel
-/// as a declarative view ([OpenXrStatusView]), which the commands that would
-/// open a dialog show, and keeps the panel current when the runtime, the
-/// settings or the VR preview change.
+/// its live state and menu and the `get_status` MCP tool. The OpenXR panel
+/// is the editor panel Widget Blueprint [OpenXrPanel.asset] the plugin ships
+/// as content: the commands that would open a dialog open it, its graph
+/// calls this process's methods, and every change (from the panel, a menu,
+/// the status button's menu or an MCP client) reaches it as an
+/// [OpenXrPanel.statusEvent] event and as patches of its status texts.
 ///
-/// Channel calls (`PluginProcessChannel.call`): `status` answers the same
-/// JSON as the `get_status` MCP tool. The plugin has no in-editor shell (its
-/// module names no `registration_class`). Caught native errors reported
-/// through `LuminaPluginCrashReporter` reach the editor's log through the
-/// plugin process runtime.
+/// Channel calls (`PluginProcessChannel.call`), each answering `statusJson()`:
+/// `status` (the same JSON as the `get_status` MCP tool),
+/// `setForceSimulation {value: bool}`, `setTrackingOrigin {value: <origin>}`,
+/// `setStereoMode {value: <mode>}` and `toggleVrPreview`; a bad value answers
+/// `bad_arguments`. The plugin has no in-editor part (its module names no
+/// `registration_class`). Caught native errors reported through
+/// `LuminaPluginCrashReporter` reach the editor's log through the plugin
+/// process runtime.
 class LuminaPluginOpenxrProcess extends LuminaPluginProcess {
   LuminaPluginOpenxrProcess([OpenXrController? controller]) : openxr = controller ?? OpenXrController();
 
@@ -38,8 +44,8 @@ class LuminaPluginOpenxrProcess extends LuminaPluginProcess {
     openxr.refreshStatus();
 
     void showPanel() => unawaited(context
-        .showPanel(OpenXrController.panelId)
-        .catchError((Object e) => context.log('show ${OpenXrController.panelId} failed: $e', level: 'error')));
+        .openEditorPanel(OpenXrPanel.asset)
+        .catchError((Object e) => context.log('opening ${OpenXrPanel.asset} failed: $e', level: 'error')));
     final checkRuntime = PluginProcessCommand(
       id: 'tools.lumina_plugin_openxr.checkRuntime',
       label: 'Check OpenXR Runtime',
@@ -116,18 +122,42 @@ class LuminaPluginOpenxrProcess extends LuminaPluginProcess {
     // MCP tool for AI agents.
     context.registerMcpTool(openxr.statusTool);
 
-    context.registerViewPanel(OpenXrStatusView.panel(openxr));
-    context.handle('status', (_) => openxr.statusJson());
+    _handle(context, 'status', (_) {});
+    _handle(context, 'setForceSimulation', (args) => openxr.setForceSimulation(_value<bool>(args, 'a bool')));
+    _handle(context, 'setTrackingOrigin',
+        (args) => openxr.setTrackingOrigin(_named(args, OpenXrTrackingOrigin.values, (o) => o.name)));
+    _handle(context, 'setStereoMode', (args) => openxr.stereoMode = _named(args, OpenXrStereoMode.values, (m) => m.name));
+    _handle(context, 'toggleVrPreview', (_) => openxr.toggleVrPreview());
 
-    // Keep the panel current when a menu command, the status button's menu
-    // or an MCP client changes the state.
+    // Keep an open panel current when the panel itself, a menu command, the
+    // status button's menu or an MCP client changes the state.
     void push() {
-      final view = context.view(OpenXrStatusView.viewId);
-      if (view != null) OpenXrStatusView.refresh(openxr, view);
+      context.patchPanel(OpenXrPanel.asset, OpenXrPanel.statusOps(openxr));
+      context.emit(OpenXrPanel.statusEvent, openxr.statusJson());
     }
 
     openxr.changes.addListener(push);
     _detach = () => openxr.changes.removeListener(push);
+  }
+
+  /// A channel method that applies [apply] and answers the status JSON.
+  void _handle(PluginProcessContext context, String method, void Function(Map<String, Object?> args) apply) =>
+      context.handle(method, (args) {
+        apply(args);
+        return openxr.statusJson();
+      });
+
+  static T _value<T>(Map<String, Object?> args, String what) {
+    final v = args['value'];
+    if (v is T) return v;
+    throw PluginRemoteError(code: PluginErrorCodes.badArguments, message: '"value" must be $what, not ${v ?? 'missing'}');
+  }
+
+  static T _named<T>(Map<String, Object?> args, List<T> values, String Function(T) name) {
+    final names = values.map(name).join(', ');
+    final v = _value<String>(args, 'one of $names');
+    return values.where((e) => name(e) == v).firstOrNull ??
+        (throw PluginRemoteError(code: PluginErrorCodes.badArguments, message: '"value" must be one of $names, not $v'));
   }
 
   @override

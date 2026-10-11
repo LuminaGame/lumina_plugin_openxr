@@ -37,15 +37,32 @@ void main() {
     expect(await exit, PluginProcessExitCodes.ok);
   }
 
-  Future<Map<String, Object?>> nextView() async {
-    final n = await host.next(PluginMethods.view, where: (a) => a['viewId'] == OpenXrStatusView.viewId);
-    return (n['spec'] as Map).cast<String, Object?>();
+  /// The next `openxr.status` event's data matching [where].
+  Future<Map<String, Object?>> nextStatus([bool Function(Map<String, Object?> status)? where]) async {
+    final n = await host.next(PluginMethods.event,
+        where: (a) => a['name'] == OpenXrPanel.statusEvent && (where == null || where((a['data'] as Map).cast())));
+    return (n['data'] as Map).cast<String, Object?>();
   }
 
-  String? textOf(Map<String, Object?> specJson, String controlId) {
-    final spec = PluginViewSpec.fromJson(specJson);
-    final c = spec.find(controlId)!;
-    return (c['value'] ?? c['text']) as String?;
+  /// The next patch of the OpenXR panel setting [element]'s text to one
+  /// [text] matches.
+  Future<PluginPanelStatePatch> nextPatch(String element, Matcher text) async {
+    final n = await host.next(PluginMethods.panelState, where: (a) {
+      final p = PluginPanelStatePatch.fromJson(a);
+      return p != null &&
+          p.panel == OpenXrPanel.asset &&
+          p.ops.any((o) => o.element == element && text.matches(o.set['text'], {}));
+    });
+    return PluginPanelStatePatch.fromJson(n)!;
+  }
+
+  Future<String> codeOf(Future<Object?> f) async {
+    try {
+      await f;
+    } on PluginRemoteError catch (e) {
+      return e.code;
+    }
+    return 'no error';
   }
 
   test('menus, the live status button with its menu, the MCP tool and the OpenXR panel arrive', () async {
@@ -71,12 +88,9 @@ void main() {
     expect(c.mcpTools.single.name, 'get_status');
     expect(c.mcpTools.single.risk, 'readOnly');
 
-    final panel = c.panels.single;
-    expect((panel.id, panel.title, panel.dock), (LuminaPluginOpenxrPlugin.panelId, 'OpenXR', 'right'));
-    expect(panel.view.id, OpenXrStatusView.viewId);
-    expect(panel.view.find(OpenXrStatusView.runtimeName)!['value'],
-        'Runtime: ${OpenXrBindings.instance.activeRuntimeName}');
-    expect(panel.view.find(OpenXrStatusView.togglePreview)!['text'], 'Start VR Preview');
+    // The panel is plugin content (an editor panel Widget Blueprint), not a
+    // declarative view of the process.
+    expect(c.panels, isEmpty);
 
     await shutdown();
   });
@@ -95,9 +109,10 @@ void main() {
     expect((state['state'] as Map)['badge'], '●');
     expect(await host.next(PluginMethods.menuChecked),
         {'path': 'Plugins/OpenXR/Toggle VR Preview', 'checked': true});
-    final view = await nextView();
-    expect(textOf(view, OpenXrStatusView.togglePreview), 'Stop VR Preview');
-    expect(textOf(view, OpenXrStatusView.sessionState), 'Session: focused (preview running)');
+    final status = await nextStatus((s) => s['vr_preview_active'] == true);
+    expect(status['session_state'], 'focused');
+    final patch = await nextPatch(OpenXrPanel.sessionState, equals('Session: focused (preview running)'));
+    expect([for (final o in patch.ops) o.element], OpenXrPanel.patchedElements.keys);
     final log = await host.next(PluginMethods.log, where: (a) => '${a['message']}'.startsWith('VR Preview'));
     expect(log['message'], 'VR Preview started (${OpenXrBindings.instance.activeRuntimeName})');
     expect(log['source'], 'OpenXR');
@@ -113,7 +128,7 @@ void main() {
     await shutdown();
   });
 
-  test('commands that would open a dialog show the OpenXR panel in the editor', () async {
+  test('commands that would open a dialog open the OpenXR editor panel', () async {
     await ready();
     for (final id in [
       'tools.lumina_plugin_openxr.checkRuntime',
@@ -125,52 +140,60 @@ void main() {
     ]) {
       await host.call(PluginMethods.command, {'commandId': id});
     }
-    // showPanel is sent without waiting; a ping orders it before the check.
+    // openEditorPanel is sent without waiting; a ping orders it before the check.
     await host.call(PluginMethods.ping);
-    final shows = [for (final r in host.requests) if (r.$1 == PluginMethods.panels) r.$2];
-    expect(shows, List.filled(6, {'op': 'show', 'panelId': LuminaPluginOpenxrPlugin.panelId}));
+    final opens = [for (final r in host.requests) if (r.$1 == PluginMethods.panels) r.$2];
+    expect(opens, List.filled(6, {'op': 'openEditorPanel', 'panelId': 'content/Editor/EPW_OpenXR.lmas'}));
 
     await shutdown();
   });
 
-  test('the panel changes the runtime choice, tracking origin and stereo mode', () async {
+  test("the panel's methods change the runtime choice, tracking origin and stereo mode", () async {
     await ready();
-    Future<void> event(String control, Object? value) => host.call(PluginMethods.viewEvent,
-        {'viewId': OpenXrStatusView.viewId, 'controlId': control, 'kind': 'changed', 'value': value});
 
-    await event(OpenXrStatusView.forceSimulation, true);
+    final forced = await host.channel.call('setForceSimulation', {'value': true}) as Map;
     expect(OpenXrBindings.instance.isSimulationForced, isTrue);
-    var view = await nextView();
-    expect(textOf(view, OpenXrStatusView.runtimeName), 'Runtime: Lumina Simulated HMD');
-    expect(textOf(view, OpenXrStatusView.manifestPath), 'Manifest: internal://simulated');
-    expect(PluginViewSpec.fromJson(view).find(OpenXrStatusView.forceSimulation)!['value'], isTrue);
+    expect(forced['simulation_forced'], isTrue);
+    expect(forced['active_runtime'], 'Lumina Simulated HMD');
+    final texts = {
+      for (final o in (await nextPatch(OpenXrPanel.runtimeName, equals('Runtime: Lumina Simulated HMD'))).ops) o.element: o.set['text'],
+    };
+    expect(texts[OpenXrPanel.manifestPath], 'Manifest: internal://simulated');
+    expect(texts[OpenXrPanel.runtimeKind], startsWith(OpenXrBindings.instance.isNativeRuntimeAvailable ? 'Simulated HMD (forced' : 'No physical'));
     // The status button shows the simulated runtime (sent as host.slotState
     // when that differs from what the editor shows).
     final sim = process.openxr.statusButtonState.value;
     expect((sim.label, sim.tooltip), ('XR (Sim)', 'OpenXR runtime: Lumina Simulated HMD (simulated)'));
 
-    await event(OpenXrStatusView.trackingOrigin, 'stage');
+    // setTrackingOrigin {"value":"stage"}: the session's origin, and an
+    // openxr.status event carrying it.
+    final staged = await host.channel.call('setTrackingOrigin', {'value': 'stage'}) as Map;
     expect(process.openxr.session.trackingOrigin, OpenXrTrackingOrigin.stage);
-    view = await nextView();
-    expect(PluginViewSpec.fromJson(view).find(OpenXrStatusView.trackingOrigin)!['value'], 'stage');
+    expect(staged['tracking_origin'], 'stage');
+    expect((await nextStatus((s) => s['tracking_origin'] == 'stage'))['simulation_forced'], isTrue);
 
-    await event(OpenXrStatusView.stereoMode, 'multiview');
+    await host.channel.call('setStereoMode', {'value': 'multiview'});
     expect(process.openxr.stereoMode, OpenXrStereoMode.multiview);
-    view = await nextView();
-    expect(PluginViewSpec.fromJson(view).find(OpenXrStatusView.stereoMode)!['value'], 'multiview');
+    await nextStatus((s) => s['stereo_mode'] == 'multiview');
 
-    // An unknown option changes nothing and sends no view.
-    await event(OpenXrStatusView.stereoMode, 'triple');
+    // setStereoMode {"value":"bogus"}: bad_arguments, nothing changes.
+    expect(await codeOf(host.channel.call('setStereoMode', {'value': 'bogus'})), PluginErrorCodes.badArguments);
+    expect(await codeOf(host.channel.call('setTrackingOrigin', {'value': 3})), PluginErrorCodes.badArguments);
+    expect(await codeOf(host.channel.call('setForceSimulation', {})), PluginErrorCodes.badArguments);
     expect(process.openxr.stereoMode, OpenXrStereoMode.multiview);
+    expect(process.openxr.session.trackingOrigin, OpenXrTrackingOrigin.stage);
 
-    // The panel's own button starts the preview.
-    await host.call(PluginMethods.viewEvent,
-        {'viewId': OpenXrStatusView.viewId, 'controlId': OpenXrStatusView.togglePreview, 'kind': 'pressed'});
+    // toggleVrPreview: the preview runs, the slot button and the menu check
+    // mark follow, and the session text is patched.
+    final running = await host.channel.call('toggleVrPreview') as Map;
     expect(process.openxr.isVrPreviewActive, isTrue);
-    view = await nextView();
-    expect(textOf(view, OpenXrStatusView.togglePreview), 'Stop VR Preview');
+    expect(running['vr_preview_active'], isTrue);
+    final state = await host.next(PluginMethods.slotState, where: (a) => (a['state'] as Map)['active'] == true);
+    expect((state['state'] as Map)['tone'], 'success');
+    expect(await host.next(PluginMethods.menuChecked), {'path': 'Plugins/OpenXR/Toggle VR Preview', 'checked': true});
+    await nextPatch(OpenXrPanel.sessionState, equals('Session: focused (preview running)'));
 
-    // The MCP tool and the shell's channel report the same state.
+    // The MCP tool and the panel's status call report the same state.
     final tool = await host.call(PluginMethods.mcpTool, {'tool': '$_name.get_status', 'arguments': {}}) as Map;
     final status = (tool['structuredContent'] as Map).cast<String, Object?>();
     expect(status, containsPair('active_runtime', 'Lumina Simulated HMD'));
@@ -187,15 +210,6 @@ void main() {
 
   test('bad requests answer an error and the process keeps serving', () async {
     await ready();
-    Future<String> codeOf(Future<Object?> f) async {
-      try {
-        await f;
-      } on PluginRemoteError catch (e) {
-        return e.code;
-      }
-      return 'no error';
-    }
-
     expect(await codeOf(host.call(PluginMethods.command, {'commandId': 'tools.lumina_plugin_openxr.nope'})),
         PluginErrorCodes.badArguments);
     expect(await codeOf(host.channel.call('nope')), PluginErrorCodes.unknownMethod);
