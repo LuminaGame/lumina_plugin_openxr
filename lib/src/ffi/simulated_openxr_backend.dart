@@ -1,12 +1,28 @@
 import 'package:vector_math/vector_math_64.dart' as vm;
+import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
 
 /// Simulated OpenXR runtime backend for development, CI, and testing without physical VR hardware.
-class SimulatedOpenXrBackend {
+///
+/// It posts the session state changes a real runtime posts (READY after the
+/// instance, SYNCHRONIZED, VISIBLE and FOCUSED after `beginSession`, IDLE
+/// after `endSession`, EXITING on shutdown), so a session follows the same
+/// event-driven state machine as on a headset.
+class SimulatedOpenXrBackend implements OpenXrBackend {
+  final List<OpenXrRuntimeEvent> _events = [];
+
   bool _initialized = false;
   OpenXrSessionState _sessionState = OpenXrSessionState.idle;
 
   // Headset simulation properties
+  @override
+  bool get isNative => false;
+
+  @override
+  String get runtimeName => 'Lumina Simulated HMD';
+
+  @override
   String get systemName => 'Lumina Virtual OpenXR HMD';
   int get recommendedImageRectWidth => 2064;
   int get recommendedImageRectHeight => 2208;
@@ -42,28 +58,90 @@ class SimulatedOpenXrBackend {
   bool get isInitialized => _initialized;
   OpenXrSessionState get sessionState => _sessionState;
 
+  @override
+  List<OpenXrViewConfiguration> get viewConfigurations => List.filled(
+      2,
+      OpenXrViewConfiguration(
+          recommendedWidth: recommendedImageRectWidth,
+          recommendedHeight: recommendedImageRectHeight,
+          maxWidth: recommendedImageRectWidth * 2,
+          maxHeight: recommendedImageRectHeight * 2));
+
+  @override
+  List<int> get blendModes => const [OpenXrBlendMode.opaque, OpenXrBlendMode.alphaBlend];
+
+  void _post(OpenXrSessionState state) {
+    _sessionState = state;
+    _events.add(OpenXrSessionStateChanged(state));
+  }
+
   XrResult initialize() {
-    _initialized = true;
-    _sessionState = OpenXrSessionState.ready;
+    if (!_initialized) {
+      _initialized = true;
+      _post(OpenXrSessionState.ready);
+    }
     return XrResult.success;
   }
 
+  @override
+  XrResult createInstance({String applicationName = 'Lumina', List<String> optionalExtensions = const []}) =>
+      initialize();
+
+  @override
+  bool extensionEnabled(String extension) => false;
+
+  @override
+  OpenXrRuntimeEvent? pollEvent() => _events.isEmpty ? null : _events.removeAt(0);
+
+  @override
   XrResult beginSession() {
     if (!_initialized) return XrResult.errorInitializationFailed;
-    _sessionState = OpenXrSessionState.focused;
+    _post(OpenXrSessionState.synchronized);
+    _post(OpenXrSessionState.visible);
+    _post(OpenXrSessionState.focused);
     return XrResult.success;
   }
 
+  @override
   XrResult endSession() {
     if (!_initialized) return XrResult.errorInitializationFailed;
-    _sessionState = OpenXrSessionState.stopping;
+    _post(OpenXrSessionState.idle);
     return XrResult.success;
+  }
+
+  @override
+  XrResult requestExitSession() {
+    if (!_initialized) return XrResult.errorInitializationFailed;
+    _post(OpenXrSessionState.stopping);
+    return XrResult.success;
+  }
+
+  @override
+  List<OpenXrEyeView> locateViews(int baseSpace, int displayTime) {
+    final left = getLeftEyeView();
+    final right = getRightEyeView();
+    return [
+      for (final v in [left, right])
+        OpenXrEyeView(
+            position: v.position,
+            orientation: v.orientation,
+            angleLeft: v.fovLeft,
+            angleRight: v.fovRight,
+            angleUp: v.fovUp,
+            angleDown: v.fovDown),
+    ];
   }
 
   XrResult shutdown() {
-    _sessionState = OpenXrSessionState.exiting;
+    if (_initialized) _post(OpenXrSessionState.exiting);
     _initialized = false;
     return XrResult.success;
+  }
+
+  @override
+  void destroy() {
+    shutdown();
+    _events.clear();
   }
 
   /// Calculates Left eye view pose and FOV.

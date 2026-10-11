@@ -1,180 +1,76 @@
-import 'dart:ffi';
-import 'dart:io';
 import 'package:ffi/ffi.dart';
-import 'package:logging/logging.dart';
-import 'package:lumina_plugin_process/lumina_plugin_process.dart' show LuminaPluginCrashReporter;
+
+import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/backend/openxr_native_backend.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_bridge_ffi.dart' as b;
+import 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 import 'package:lumina_plugin_openxr/src/ffi/simulated_openxr_backend.dart';
 
-final _log = Logger('OpenXrBindings');
-
-typedef _IsRuntimeAvailableC = Int32 Function();
-typedef _IsRuntimeAvailableDart = int Function();
-
-typedef _GetActiveRuntimeStringC = Pointer<Utf8> Function();
-typedef _GetActiveRuntimeStringDart = Pointer<Utf8> Function();
-
-typedef _InitializeC = Int32 Function();
-typedef _InitializeDart = int Function();
-
-typedef _ShutdownC = Void Function();
-typedef _ShutdownDart = void Function();
-
-/// Unified OpenXR Native and Simulated bindings manager.
+/// The runtime choice: the installed OpenXR runtime through the native bridge
+/// ([OpenXrNativeBackend]) when there is one, else (or when forced) the
+/// simulated headset. Calls into the bridge are guarded: a failure is
+/// reported through [OpenXrErrorReporter] and the simulator takes over.
 class OpenXrBindings {
   static final OpenXrBindings instance = OpenXrBindings._();
 
-  DynamicLibrary? _bridgeLib;
+  OpenXrBindings._();
+
   bool _forceSimulation = false;
   final SimulatedOpenXrBackend _simulator = SimulatedOpenXrBackend();
+  OpenXrNativeBackend? _native;
 
-  OpenXrBindings._() {
-    _tryLoadNativeBridge();
-  }
-
-  void _tryLoadNativeBridge() {
-    try {
-      if (Platform.isWindows) {
-        _bridgeLib = DynamicLibrary.open('openxr_bridge.dll');
-      } else if (Platform.isLinux) {
-        _bridgeLib = DynamicLibrary.open('libopenxr_bridge.so');
-      } else if (Platform.isMacOS) {
-        _bridgeLib = DynamicLibrary.open('libopenxr_bridge.dylib');
-      }
-    } catch (e) {
-      // Library not built or not found in search path; will use simulated runtime.
-      _bridgeLib = null;
-      _log.fine('Native OpenXR bridge not loaded ($e), falling back to simulated runtime');
-    }
-  }
-
-  /// The underlying simulated backend.
+  /// The simulated headset.
   SimulatedOpenXrBackend get simulator => _simulator;
 
-  /// Whether simulated runtime is currently forced or active.
+  /// The native backend (created on first use).
+  OpenXrNativeBackend get native => _native ??= OpenXrNativeBackend();
+
+  /// The backend in use: native when a runtime is available and simulation
+  /// is not forced.
+  OpenXrBackend get backend => isSimulated ? _simulator : native;
+
+  /// Whether the simulated runtime is in use.
   bool get isSimulated => _forceSimulation || !isNativeRuntimeAvailable;
 
   /// Whether [setForceSimulation] forced the simulated runtime.
   bool get isSimulationForced => _forceSimulation;
 
-  /// Toggles simulation mode manually.
-  void setForceSimulation(bool force) {
-    _forceSimulation = force;
-  }
+  /// Forces the simulated runtime even when a native one exists.
+  void setForceSimulation(bool force) => _forceSimulation = force;
 
-  /// Whether a native OpenXR loader and active runtime was detected on the host system.
-  bool get isNativeRuntimeAvailable {
-    final lib = _bridgeLib;
-    if (lib == null) return false;
-    try {
-      final func = lib.lookupFunction<_IsRuntimeAvailableC, _IsRuntimeAvailableDart>('openxr_bridge_is_runtime_available');
-      return func() == 1;
-    } catch (e, stack) {
-      _log.warning('Failed to query native OpenXR bridge runtime status', e);
-      LuminaPluginCrashReporter.reportCrash(
-        e,
-        stack,
-        plugin: 'lumina_plugin_openxr',
-        context: 'isNativeRuntimeAvailable: openxr_bridge_is_runtime_available',
-      );
-      return false;
-    }
-  }
+  /// Whether an OpenXR runtime is registered (desktop) or reachable through
+  /// the runtime broker (Android), and the bridge loads.
+  bool get isNativeRuntimeAvailable => OpenXrNativeBackend.runtimeAvailable;
 
-  /// Active runtime name (e.g. "Meta Quest / Oculus Link", "SteamVR", or "Lumina Simulated HMD").
+  /// The active runtime's name ("SteamVR", "Meta Quest / Oculus Link", ...),
+  /// or "Lumina Simulated HMD".
   String get activeRuntimeName {
-    if (_forceSimulation) return 'Lumina Simulated HMD';
-    final lib = _bridgeLib;
-    if (lib != null) {
-      try {
-        final func = lib.lookupFunction<_GetActiveRuntimeStringC, _GetActiveRuntimeStringDart>('openxr_bridge_get_active_runtime_name');
-        final ptr = func();
-        if (ptr != nullptr) {
-          final str = ptr.toDartString();
-          if (str.isNotEmpty && str != 'None') return str;
-        }
-      } catch (e, stack) {
-        _log.warning('Failed to get active OpenXR runtime name', e);
-        LuminaPluginCrashReporter.reportCrash(
-          e,
-          stack,
-          plugin: 'lumina_plugin_openxr',
-          context: 'activeRuntimeName: openxr_bridge_get_active_runtime_name',
-        );
-      }
-    }
-    return isNativeRuntimeAvailable ? 'OpenXR Native Runtime' : 'Lumina Simulated HMD';
+    if (isSimulated) return _simulator.runtimeName;
+    final name = OpenXrErrorReporter.guard(
+        'activeRuntimeName: openxr_bridge_get_active_runtime_name', () => b.openxr_bridge_get_active_runtime_name().toDartString(), '');
+    return name.isEmpty || name == 'None' ? 'OpenXR Native Runtime' : name;
   }
 
-  /// Path to the active runtime manifest JSON if known.
+  /// The active runtime's manifest path, if known.
   String get activeRuntimePath {
     if (_forceSimulation) return 'internal://simulated';
-    final lib = _bridgeLib;
-    if (lib != null) {
-      try {
-        final func = lib.lookupFunction<_GetActiveRuntimeStringC, _GetActiveRuntimeStringDart>('openxr_bridge_get_active_runtime_path');
-        final ptr = func();
-        if (ptr != nullptr) {
-          return ptr.toDartString();
-        }
-      } catch (e, stack) {
-        _log.warning('Failed to get active OpenXR runtime path', e);
-        LuminaPluginCrashReporter.reportCrash(
-          e,
-          stack,
-          plugin: 'lumina_plugin_openxr',
-          context: 'activeRuntimePath: openxr_bridge_get_active_runtime_path',
-        );
-      }
-    }
-    return '';
+    return OpenXrErrorReporter.guard(
+        'activeRuntimePath: openxr_bridge_get_active_runtime_path', () => b.openxr_bridge_get_active_runtime_path().toDartString(), '');
   }
 
-  /// Initializes the OpenXR instance.
+  /// Loads the loader (native) or starts the simulator.
   XrResult initialize() {
-    if (isSimulated) {
-      return _simulator.initialize();
-    }
-
-    final lib = _bridgeLib;
-    if (lib != null) {
-      try {
-        final func = lib.lookupFunction<_InitializeC, _InitializeDart>('openxr_bridge_initialize');
-        final res = func();
-        return res == 0 ? XrResult.success : XrResult.errorInitializationFailed;
-      } catch (e, stack) {
-        _log.warning('Native OpenXR bridge initialization failed, falling back to simulator', e);
-        LuminaPluginCrashReporter.reportCrash(
-          e,
-          stack,
-          plugin: 'lumina_plugin_openxr',
-          context: 'initialize: openxr_bridge_initialize',
-        );
-      }
-    }
+    if (isSimulated) return _simulator.initialize();
+    final ok = OpenXrErrorReporter.guard('initialize: openxr_bridge_initialize', () => b.openxr_bridge_initialize() == 0, false);
+    if (ok) return XrResult.success;
     return _simulator.initialize();
   }
 
-  /// Shuts down the OpenXR instance.
+  /// Destroys the native session and instance, or stops the simulator.
   void shutdown() {
-    if (isSimulated) {
-      _simulator.shutdown();
-      return;
-    }
-    final lib = _bridgeLib;
-    if (lib != null) {
-      try {
-        final func = lib.lookupFunction<_ShutdownC, _ShutdownDart>('openxr_bridge_shutdown');
-        func();
-      } catch (e, stack) {
-        _log.warning('Native OpenXR bridge shutdown failed', e);
-        LuminaPluginCrashReporter.reportCrash(
-          e,
-          stack,
-          plugin: 'lumina_plugin_openxr',
-          context: 'shutdown: openxr_bridge_shutdown',
-        );
-      }
+    if (!isSimulated) {
+      OpenXrErrorReporter.guard('shutdown: openxr_bridge_shutdown', b.openxr_bridge_shutdown, null);
     }
     _simulator.shutdown();
   }

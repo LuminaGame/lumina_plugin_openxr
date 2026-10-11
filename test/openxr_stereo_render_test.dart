@@ -31,7 +31,9 @@ void main() {
 
       // View matrix should be valid
       final viewMat = leftEyeView.createViewMatrix();
-      expect(viewMat.entry(3, 0), closeTo(0.032, 0.001)); // inverse translation
+      // Inverse translation, in column 3 (vector_math is column-major).
+      expect(viewMat.entry(0, 3), closeTo(0.032, 0.001));
+      expect(viewMat.entry(3, 0), 0);
     });
 
     test('OpenXrFilamentBridge maps stereo mode to Filament StereoscopicType properly', () {

@@ -35,8 +35,9 @@ spatial anchors, scene, face and eye tracking) live in
 
 Version 0.1.0. The plugin is the foundation layer: runtime discovery, the loader bridge, the data model, the
 components, the stereo maths, the simulated headset and the editor integration are in place and tested. The native
-bridge does **not** yet create an `XrInstance` / `XrSession`, locate spaces or submit frames to the compositor; a
-"native" session today means a runtime and loader were found. The table says what works now.
+bridge creates the `XrInstance`, the Vulkan device (`XR_KHR_vulkan_enable2`) and the `XrSession`, follows the
+runtime's session events, runs the frame loop on a native thread and locates spaces and views; it runs on a Meta
+Quest 3S. The table says what works now.
 
 | Area | State |
 |---|---|
@@ -47,10 +48,12 @@ bridge does **not** yet create an `XrInstance` / `XrSession`, locate spaces or s
 | XR origin actor, HMD component (eye positions), controller component (grip/aim, inputs, haptics request) | done |
 | Asymmetric per-eye projection and view matrices; Filament `EngineConfig` for instanced/multiview stereo | done |
 | Editor menus, the OpenXR panel (an editor panel Widget Blueprint), status bar button, MCP diagnostic tool | done |
-| `xrCreateInstance` / `xrCreateSession`, event polling, `xrLocateSpace` / `xrLocateViews` through the bridge | planned |
-| Swapchain creation and frame submission (`xrWaitFrame` / `xrBeginFrame` / `xrEndFrame`) | planned |
+| `xrCreateInstance` / `xrCreateSession`, the Vulkan device through `XR_KHR_vulkan_enable2`, event polling and the event-driven session state machine, `xrLocateSpace` / `xrLocateViews` | done (Quest 3S: FOCUSED at 72 Hz) |
+| The frame loop (`xrWaitFrame` on a native pacer thread, empty frames until a renderer attaches) | done |
+| Swapchain creation and frame submission with Filament | planned |
 | Action binding to interaction profiles (`xrSuggestInteractionProfileBindings`, `xrSyncActions`), real haptics | planned |
-| Android (Meta Quest standalone) native path | planned (Android runs on the simulated backend today) |
+| Android (Meta Quest standalone) native path: the Khronos loader from Maven Central, the activity handed over by the Kotlin part (`OpenXrPlugin`) | done |
+| `package:lumina_plugin_openxr/runtime.dart`: the library a game imports, free of editor code | done |
 
 ## Features
 
@@ -394,10 +397,12 @@ src/              openxr_bridge_c.h / .cpp (C API, FFI_PLUGIN_EXPORT)
 | OpenXR | metres | right-handed, X right, Y up, −Z forward |
 | Lumina (stored transforms) | centimetres (one world unit = 1 cm) | Z up |
 
-`OpenXrSpaceConverter` maps OpenXR `(x, y, z)` metres to `(−z, x, y) × 100` centimetres — X forward, Y right, Z up —
-and back with `luminaToOpenXrPosition`; `openXrToLuminaRotation` applies the same change of basis to orientations.
-The HMD component works in the same frame (+Y is right when it places the eyes) and keeps the IPD in metres. The
-simulator and the stereo maths stay in OpenXR metres, as the runtime reports them.
+Lumina's runtime has OpenXR's axes (Y up, −Z forward, +X right) in centimetres, so
+`OpenXrSpaceConverter.openXrToRuntimePosition` only scales by 100 and `openXrToRuntimeRotation` keeps the rotation;
+the HMD and controller components use these. Stored (authoring) transforms are Z up and go through `LuminaAxes`:
+`openXrToLuminaPosition` gives the authoring location `(x, −z, y) × 100` (forward +Y, up +Z), `luminaToOpenXrPosition`
+the way back, and `openXrToLuminaRotation` the same change of basis for orientations. The simulator and the stereo
+maths stay in OpenXR metres, as the runtime reports them.
 
 ## Testing
 
@@ -446,19 +451,15 @@ plugin with its real process (set `LUMINA_OPENXR_DIR` when it is not `../openxr`
 
 ## Limitations and roadmap
 
-- No `XrInstance`, `XrSession`, space location, swapchains or frame submission through the bridge yet; on a machine
-  with a runtime the session reports `focused` once the loader is loaded, and poses come from your own code or the
-  simulator.
+- Frames are submitted empty until the swapchain and Filament rendering land (next step).
 - `OpenXrActionSet.sync()` does not read the runtime yet; controller states are filled by the caller.
   `playHapticPulse` records the request (`lastHapticPulse`) without sending it to a device.
 - The stereo mode chosen in the OpenXR panel is not yet pushed to the plugin's `OpenXrFilamentBridge`.
-- `OpenXrSpaceConverter` uses its own forward axis (+X); aligning it with the engine's authoring frame
-  (`LuminaAxes`) is planned.
-- Android / Meta Quest standalone builds use the simulated backend until the bridge is built and loaded for Android.
+- No PC runtime was available while the native path was built; the desktop bridge compiles and finds a runtime the
+  same way, but has only run on the Quest.
 
-Planned next: instance and session creation with the required extensions, `xrLocateViews` / `xrLocateSpace`
-feeding the components, swapchain images shared with Filament, action bindings per interaction profile with real
-haptics, and the Android loader path.
+Planned next: swapchain images shared with Filament (multiview) and frame submission, then action bindings per
+interaction profile with real haptics.
 
 ## Contributing
 

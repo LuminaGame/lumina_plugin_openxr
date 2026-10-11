@@ -22,20 +22,24 @@ void main() {
     test('LuminaXRHMDComponent computes eye offsets from IPD and updates pose', () {
       final hmd = LuminaXRHMDComponent(
         interPupillaryDistance: 0.064, // 64mm
-        location: Vector3(0.0, 0.0, 170.0), // 170 cm eye height
+        location: Vector3(0.0, 170.0, 0.0), // 170 cm eye height (runtime: Y up)
       );
 
-      // In Lumina +Y is right. Half-IPD is 3.2 cm.
-      // Left eye is -3.2 cm on Y, Right eye is +3.2 cm on Y.
-      expect(hmd.leftEyeLocation.y, closeTo(-3.2, 0.01));
-      expect(hmd.rightEyeLocation.y, closeTo(3.2, 0.01));
-      expect(hmd.leftEyeLocation.z, closeTo(170.0, 0.01));
-      expect(hmd.rightEyeLocation.z, closeTo(170.0, 0.01));
+      // In the runtime +X is right. Half-IPD is 3.2 cm.
+      expect(hmd.leftEyeLocation.x, closeTo(-3.2, 0.01));
+      expect(hmd.rightEyeLocation.x, closeTo(3.2, 0.01));
+      expect(hmd.leftEyeLocation.y, closeTo(170.0, 0.01));
+      expect(hmd.rightEyeLocation.y, closeTo(170.0, 0.01));
 
       // Update pose from OpenXR coordinates (0, 1.8m, 0)
       hmd.updatePoseFromOpenXr(Vector3(0.0, 1.8, 0.0), Quaternion.identity());
-      expect(hmd.location.z, closeTo(180.0, 0.01));
-      expect(hmd.leftEyeLocation.z, closeTo(180.0, 0.01));
+      expect(hmd.location.y, closeTo(180.0, 0.01));
+      expect(hmd.leftEyeLocation.y, closeTo(180.0, 0.01));
+
+      // Turned 90 degrees left (about +Y): the head faces -X and its right is -Z.
+      hmd.updatePoseFromOpenXr(Vector3(0.0, 1.8, 0.0), Quaternion.axisAngle(Vector3(0, 1, 0), 1.5707963267948966));
+      expect(hmd.rightEyeLocation.z, closeTo(-3.2, 0.01));
+      expect(hmd.rightEyeLocation.x, closeTo(0, 0.01));
     });
 
     test('LuminaXRControllerComponent records pose and triggers haptic pulse', () {
@@ -48,12 +52,10 @@ void main() {
         openXrGripRot: Quaternion.identity(),
       );
 
-      // OpenXR -0.4 Z forward -> Lumina +40 cm X forward
-      expect(controller.location.x, closeTo(40.0, 0.01));
-      // OpenXR 0.2 X right -> Lumina +20 cm Y right
-      expect(controller.location.y, closeTo(20.0, 0.01));
-      // OpenXR 1.2 Y up -> Lumina +120 cm Z up
-      expect(controller.location.z, closeTo(120.0, 0.01));
+      // The runtime has OpenXR's axes in centimetres.
+      expect(controller.location.x, closeTo(20.0, 0.01));
+      expect(controller.location.y, closeTo(120.0, 0.01));
+      expect(controller.location.z, closeTo(-40.0, 0.01));
 
       // Play haptic pulse
       controller.playHapticPulse(amplitude: 0.75, durationMicroseconds: 50000);

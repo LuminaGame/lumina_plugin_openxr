@@ -5,6 +5,7 @@ analyzer:
     - build/**
     - filament/**
     - test-assets/**
+    - android/**
   language:
     strict-casts: true
     strict-inference: true

@@ -31,6 +31,11 @@ dependencies:
       url: https://github.com/LuminaGame/lumina.git
       path: flutter_filament
       ref: 87ca08bec43927031cb16a4297336d4d96389e35
+  lumina_core:
+    git:
+      url: https://github.com/LuminaGame/lumina.git
+      path: lumina_core
+      ref: 87ca08bec43927031cb16a4297336d4d96389e35
   ffi: ^2.1.2
   vector_math: ^2.1.4
   meta: ^1.15.0
@@ -38,15 +43,11 @@ dependencies:
   hooks: ^1.0.0
   code_assets: ^1.0.0
   native_toolchain_c: ^0.17.4
+  crypto: ^3.0.6
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  lumina_core:
-    git:
-      url: https://github.com/LuminaGame/lumina.git
-      path: lumina_core
-      ref: 87ca08bec43927031cb16a4297336d4d96389e35
   flutter_lints: ^6.0.0
   test: ^1.24.0
   archive: ^4.2.0
@@ -63,3 +64,11 @@ hooks:
       riglogic_lib_dir: ../tools/flutter_riglogic/third_party/openriglogic/lib
 
 flutter:
+  plugin:
+    platforms:
+      # The Kotlin part hands the Activity to the native bridge (the OpenXR
+      # loader and XR_KHR_android_create_instance need it). The bridge itself
+      # is a native-assets code asset (hook/build.dart).
+      android:
+        package: com.lumina.openxr
+        pluginClass: OpenXrPlugin

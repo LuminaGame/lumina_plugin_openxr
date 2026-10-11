@@ -53,6 +53,10 @@ enum OpenXrSessionState {
 
   final int value;
   const OpenXrSessionState(this.value);
+
+  /// The state for an `XrSessionState` value (the values are the same).
+  static OpenXrSessionState fromXr(int value) =>
+      values.firstWhere((s) => s.value == value, orElse: () => OpenXrSessionState.unknown);
 }
 
 /// Tracking reference space origin.

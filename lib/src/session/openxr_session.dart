@@ -1,29 +1,65 @@
 import 'package:logging/logging.dart';
-import 'package:lumina_plugin_process/lumina_plugin_process.dart' show LuminaPluginCrashReporter;
 import 'package:vector_math/vector_math_64.dart' as vm;
+
+import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/backend/openxr_native_backend.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
+import 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
+import 'package:lumina_plugin_openxr/src/session/openxr_session_state_machine.dart';
 import 'package:lumina_plugin_openxr/src/session/openxr_space.dart';
 
 final _log = Logger('OpenXrSession');
 
-/// Manages an active OpenXR session and its reference spaces.
+/// An OpenXR session and its reference spaces. The state follows the
+/// runtime's events ([pollEvents]); this class carries out what the state
+/// machine asks for (begin, end, recreate, quit).
 class OpenXrSession {
-  final OpenXrBindings _bindings;
-  OpenXrSessionState _state = OpenXrSessionState.idle;
-  OpenXrTrackingOrigin _trackingOrigin = OpenXrTrackingOrigin.floorLevel;
-  late final OpenXrReferenceSpace _currentSpace;
-
-  OpenXrSession({OpenXrBindings? bindings})
-      : _bindings = bindings ?? OpenXrBindings.instance {
+  OpenXrSession({OpenXrBindings? bindings, OpenXrBackend? backend})
+      : _bindings = bindings ?? OpenXrBindings.instance,
+        _backendOverride = backend {
     _currentSpace = OpenXrReferenceSpace(originType: _trackingOrigin);
   }
 
-  OpenXrSessionState get state => _state;
+  final OpenXrBindings _bindings;
+  final OpenXrBackend? _backendOverride;
+  final OpenXrSessionStateMachine machine = OpenXrSessionStateMachine();
+  OpenXrTrackingOrigin _trackingOrigin = OpenXrTrackingOrigin.floorLevel;
+  late final OpenXrReferenceSpace _currentSpace;
+  bool _started = false;
+
+  /// Called after the session began (start the frame loop there) and before
+  /// it ends (stop it there).
+  void Function()? onSessionBegan;
+  void Function()? onSessionEnding;
+
+  /// Called when the runtime asks the application to quit (EXITING).
+  void Function()? onExitRequested;
+
+  /// The renderer's device-info functions (`openXrFilamentDeviceInfo()`):
+  /// a native session creates its Vulkan device with them. Without them a
+  /// native session cannot start.
+  OpenXrVulkanDeviceInfoFunctions? vulkanDeviceInfo;
+
+  /// Whether the device is created with multiview (both eyes in one pass).
+  bool multiview = true;
+
+  /// The backend this session runs on.
+  OpenXrBackend get backend => _backendOverride ?? _bindings.backend;
+
+  OpenXrSessionState get state => machine.state;
   OpenXrTrackingOrigin get trackingOrigin => _trackingOrigin;
   OpenXrReferenceSpace get currentSpace => _currentSpace;
 
-  /// Changes tracking origin between FloorLevel, EyeLevel, and Stage.
+  /// The reference space type of [trackingOrigin].
+  int get referenceSpaceType => switch (_trackingOrigin) {
+        OpenXrTrackingOrigin.eyeLevel => OpenXrReferenceSpaceType.local,
+        OpenXrTrackingOrigin.floorLevel => OpenXrReferenceSpaceType.localFloor,
+        OpenXrTrackingOrigin.stage => OpenXrReferenceSpaceType.stage,
+      };
+
+  /// Changes the tracking origin between floor level, eye level and stage.
   void setTrackingOrigin(OpenXrTrackingOrigin origin) {
     _trackingOrigin = origin;
     _currentSpace.offsetPosition.setZero();
@@ -31,70 +67,100 @@ class OpenXrSession {
     _log.info('OpenXR tracking origin set to $origin');
   }
 
-  /// Begins the OpenXR session.
+  /// Starts the session: the instance (and, natively, the Vulkan device and
+  /// the session), then the events the runtime posts move it on; the
+  /// simulator's are handled right away.
   XrResult beginSession() {
     try {
-      final res = _bindings.initialize();
-      if (res.isFailure) return res;
-
-      if (_bindings.isSimulated) {
-        final simRes = _bindings.simulator.beginSession();
-        if (simRes.isSuccess) {
-          _state = OpenXrSessionState.focused;
+      final backend = this.backend;
+      var r = backend.createInstance(optionalExtensions: const [
+        'XR_EXT_local_floor',
+        'XR_FB_display_refresh_rate',
+        'XR_FB_passthrough',
+        'XR_EXT_hand_tracking',
+        'XR_FB_composition_layer_alpha_blend',
+      ]);
+      if (r.isFailure) return r;
+      if (backend is OpenXrNativeBackend) {
+        final info = vulkanDeviceInfo;
+        if (info == null) {
+          _log.warning('a native OpenXR session needs the renderer\'s Vulkan device info (vulkanDeviceInfo)');
+          return XrResult.errorInitializationFailed;
         }
-        return simRes;
+        r = backend.createVulkanDevice(info, multiview: multiview);
+        if (r.isFailure) return r;
+        r = backend.createSession();
+        if (r.isFailure) return r;
       }
-
-      _state = OpenXrSessionState.focused;
+      _started = true;
+      pollEvents();
       return XrResult.success;
     } catch (e, stack) {
-      _log.severe('Error beginning OpenXR session: $e');
-      LuminaPluginCrashReporter.reportCrash(
-        e,
-        stack,
-        plugin: 'lumina_plugin_openxr',
-        context: 'OpenXrSession.beginSession',
-      );
+      OpenXrErrorReporter.report(e, stack, 'OpenXrSession.beginSession');
       return XrResult.errorInitializationFailed;
     }
   }
 
-  /// Ends the OpenXR session.
+  /// Ends the session and destroys it.
   XrResult endSession() {
     try {
-      if (_bindings.isSimulated) {
-        _bindings.simulator.endSession();
-      } else {
-        _bindings.shutdown();
+      if (machine.sessionRunning) {
+        onSessionEnding?.call();
+        backend.endSession();
+        machine.sessionEnded();
       }
-      _state = OpenXrSessionState.stopping;
+      backend.destroy();
+      _bindings.shutdown();
+      machine.reset();
+      machine.onEvent(const OpenXrSessionStateChanged(OpenXrSessionState.stopping));
+      _started = false;
       return XrResult.success;
     } catch (e, stack) {
-      _log.warning('Error ending OpenXR session: $e');
-      LuminaPluginCrashReporter.reportCrash(
-        e,
-        stack,
-        plugin: 'lumina_plugin_openxr',
-        context: 'OpenXrSession.endSession',
-      );
+      OpenXrErrorReporter.report(e, stack, 'OpenXrSession.endSession');
       return XrResult.errorInitializationFailed;
     }
   }
 
-  /// Ticks frame lifecycle and queries runtime events.
-  void pollEvents() {
+  /// Handles every waiting runtime event; returns them.
+  List<OpenXrRuntimeEvent> pollEvents() {
+    final handled = <OpenXrRuntimeEvent>[];
+    if (!_started) return handled;
     try {
-      if (_bindings.isSimulated) {
-        _state = _bindings.simulator.sessionState;
+      for (var i = 0; i < 64; i++) {
+        final event = backend.pollEvent();
+        if (event == null) break;
+        handled.add(event);
+        for (final action in machine.onEvent(event)) {
+          _perform(action);
+        }
       }
     } catch (e, stack) {
-      _log.warning('Error polling OpenXR events: $e');
-      LuminaPluginCrashReporter.reportCrash(
-        e,
-        stack,
-        plugin: 'lumina_plugin_openxr',
-        context: 'OpenXrSession.pollEvents',
-      );
+      OpenXrErrorReporter.report(e, stack, 'OpenXrSession.pollEvents');
+    }
+    return handled;
+  }
+
+  void _perform(OpenXrSessionAction action) {
+    switch (action) {
+      case OpenXrSessionAction.beginSession:
+        if (backend.beginSession().isSuccess) {
+          machine.sessionBegan();
+          onSessionBegan?.call();
+        }
+      case OpenXrSessionAction.endSession:
+        onSessionEnding?.call();
+        backend.endSession();
+        machine.sessionEnded();
+      case OpenXrSessionAction.recreateInstance:
+        onSessionEnding?.call();
+        backend.destroy();
+        machine.reset();
+        _started = false;
+      case OpenXrSessionAction.quit:
+        onSessionEnding?.call();
+        backend.destroy();
+        _started = false;
+        onExitRequested?.call();
     }
   }
 }

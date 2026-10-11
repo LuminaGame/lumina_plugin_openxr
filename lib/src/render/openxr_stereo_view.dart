@@ -40,36 +40,20 @@ class OpenXrStereoView {
     return m;
   }
 
-  /// Computes the eye view matrix (inverse of eye transform).
+  /// The eye's view matrix: the inverse of its pose (rotation, then
+  /// translation), so the eye position maps to the origin. vector_math is
+  /// column-major: the translation lives in column 3 (`setEntry(row, 3, …)`).
   vm.Matrix4 createViewMatrix() {
-    final rotMat = eyeOrientation.asRotationMatrix();
-    final transMat = rotMat.transposed();
-    final double tx = transMat.entry(0, 0) * -eyePosition.x +
-        transMat.entry(0, 1) * -eyePosition.y +
-        transMat.entry(0, 2) * -eyePosition.z;
-    final double ty = transMat.entry(1, 0) * -eyePosition.x +
-        transMat.entry(1, 1) * -eyePosition.y +
-        transMat.entry(1, 2) * -eyePosition.z;
-    final double tz = transMat.entry(2, 0) * -eyePosition.x +
-        transMat.entry(2, 1) * -eyePosition.y +
-        transMat.entry(2, 2) * -eyePosition.z;
-
-    final m = vm.Matrix4.identity();
-    m.setEntry(0, 0, rotMat.entry(0, 0));
-    m.setEntry(1, 0, rotMat.entry(1, 0));
-    m.setEntry(2, 0, rotMat.entry(2, 0));
-
-    m.setEntry(0, 1, rotMat.entry(0, 1));
-    m.setEntry(1, 1, rotMat.entry(1, 1));
-    m.setEntry(2, 1, rotMat.entry(2, 1));
-
-    m.setEntry(0, 2, rotMat.entry(0, 2));
-    m.setEntry(1, 2, rotMat.entry(1, 2));
-    m.setEntry(2, 2, rotMat.entry(2, 2));
-
-    m.setEntry(3, 0, tx);
-    m.setEntry(3, 1, ty);
-    m.setEntry(3, 2, tz);
+    final rotation = eyeOrientation.asRotationMatrix();
+    final inverse = rotation.transposed();
+    final t = inverse.transformed(-eyePosition);
+    final m = vm.Matrix4.identity()..setRotation(inverse);
+    m.setEntry(0, 3, t.x);
+    m.setEntry(1, 3, t.y);
+    m.setEntry(2, 3, t.z);
     return m;
   }
+
+  /// The eye's model matrix (its pose): the inverse of [createViewMatrix].
+  vm.Matrix4 createModelMatrix() => vm.Matrix4.compose(eyePosition, eyeOrientation, vm.Vector3.all(1));
 }

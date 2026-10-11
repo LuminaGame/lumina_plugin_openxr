@@ -1,17 +1,8 @@
+/// The OpenXR plugin: the editor-side process part (its controller, panel
+/// patches and MCP tool) plus everything in [runtime.dart] a game uses.
 library;
 
-export 'src/process/lumina_plugin_openxr_process.dart';
-export 'src/process/openxr_controller.dart';
-export 'src/process/openxr_panel.dart';
-export 'src/ffi/openxr_types.dart';
-export 'src/ffi/openxr_bindings.dart';
-export 'src/ffi/simulated_openxr_backend.dart';
-export 'src/session/openxr_session.dart';
-export 'src/session/openxr_space.dart';
-export 'xr_types.dart';
-export 'src/components/lumina_xr_hmd_component.dart';
-export 'src/components/lumina_xr_controller_component.dart';
-export 'src/components/lumina_xr_origin_actor.dart';
-export 'src/render/openxr_stereo_view.dart';
-export 'src/render/openxr_filament_bridge.dart';
-export 'src/render/openxr_swapchain.dart';
+export 'package:lumina_plugin_openxr/runtime.dart';
+export 'package:lumina_plugin_openxr/src/process/lumina_plugin_openxr_process.dart';
+export 'package:lumina_plugin_openxr/src/process/openxr_controller.dart';
+export 'package:lumina_plugin_openxr/src/process/openxr_panel.dart';

@@ -6,8 +6,8 @@ import 'package:lumina_plugin_process/testing.dart';
 /// The packages the process part (the library declaring
 /// LuminaPluginOpenxrProcess and everything it imports from this package)
 /// imports directly: the process API, the OpenXR loader bridge's FFI helpers,
-/// logging and the pose math.
-const allowed = {'ffi', 'logging', 'lumina_plugin_process', 'vector_math'};
+/// logging, the pose math and Lumina's units and axes (lumina_core, pure Dart).
+const allowed = {'ffi', 'logging', 'lumina_core', 'lumina_plugin_process', 'vector_math'};
 
 /// The packages among them that tie the process part to Flutter, each with
 /// the reason. Empty: the process part could run as a plain `dart` program.

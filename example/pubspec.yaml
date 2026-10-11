@@ -1,0 +1,35 @@
+name: openxr_example
+description: "Bring-up app for lumina_plugin_openxr on a standalone headset: an OpenXR session on the native runtime, logged to logcat (tag LuminaOpenXR)."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_filament:
+    git:
+      url: https://github.com/LuminaGame/lumina.git
+      path: flutter_filament
+      ref: 87ca08bec43927031cb16a4297336d4d96389e35
+  lumina_plugin_openxr:
+    path: ../
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+hooks:
+  user_defines:
+    flutter_filament:
+      filament_dir: ../filament
+    flutter_assimp:
+      filament_dir: ../filament
+      libcxx_dir: ../../lumina/flutter_filament/third_party/libcxx
+    flutter_riglogic:
+      libcxx_dir: ../../lumina/flutter_filament/third_party/libcxx
+      riglogic_lib_dir: ../../tools/flutter_riglogic/third_party/openriglogic/lib
+
+flutter:
+  uses-material-design: true

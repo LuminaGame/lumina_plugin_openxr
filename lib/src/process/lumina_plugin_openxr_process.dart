@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:lumina_plugin_process/lumina_plugin_process.dart';
 
+import 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 import 'package:lumina_plugin_openxr/src/process/openxr_controller.dart';
 import 'package:lumina_plugin_openxr/src/process/openxr_panel.dart';
@@ -40,6 +41,9 @@ class LuminaPluginOpenxrProcess extends LuminaPluginProcess {
 
   @override
   FutureOr<void> register(PluginProcessContext context) {
+    // Failures at the native boundary reach the editor's crash reporter with the plugin named.
+    OpenXrErrorReporter.handler = (error, stack, where) =>
+        LuminaPluginCrashReporter.reportCrash(error, stack, plugin: OpenXrController.pluginName, context: where);
     openxr.log = (message, level) => context.level.log(message, level: level, source: 'OpenXR');
     openxr.refreshStatus();
 

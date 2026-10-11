@@ -35,9 +35,10 @@ benzetimli bir başlık.
 ## Durum
 
 Sürüm 0.1.0. Eklenti temel katmandır: çalışma zamanı keşfi, yükleyici köprüsü, veri modeli, bileşenler, stereo
-matematiği, benzetimli başlık ve editör entegrasyonu hazır ve testli. Yerel köprü henüz bir `XrInstance` /
-`XrSession` **oluşturmuyor**, uzay konumu sorgulamıyor ve kareleri compositor'a göndermiyor; bugün "yerel" oturum,
-bir çalışma zamanı ve yükleyicinin bulunduğu anlamına gelir. Tablo şu an neyin çalıştığını gösteriyor.
+matematiği, benzetimli başlık ve editör entegrasyonu hazır ve testli. Yerel köprü `XrInstance`'ı, Vulkan cihazını
+(`XR_KHR_vulkan_enable2`) ve `XrSession`'ı oluşturuyor, çalışma zamanının oturum olaylarını izliyor, kare döngüsünü
+yerel bir iş parçacığında çalıştırıyor ve uzayları ile görünümleri konumluyor; bir Meta Quest 3S üzerinde çalışıyor.
+Tablo şu an neyin çalıştığını gösteriyor.
 
 | Alan | Durum |
 |---|---|
@@ -48,10 +49,12 @@ bir çalışma zamanı ve yükleyicinin bulunduğu anlamına gelir. Tablo şu an
 | XR origin aktörü, HMD bileşeni (göz konumları), kontrolcü bileşeni (grip/aim, girdiler, titreşim isteği) | tamam |
 | Göz başına asimetrik projeksiyon ve görünüm matrisleri; instanced/multiview stereo için Filament `EngineConfig` | tamam |
 | Editör menüleri, OpenXR paneli (bir editör paneli Widget Blueprint'i), durum çubuğu düğmesi, MCP tanılama aracı | tamam |
-| Köprü üzerinden `xrCreateInstance` / `xrCreateSession`, olay sorgulama, `xrLocateSpace` / `xrLocateViews` | planlandı |
-| Swapchain oluşturma ve kare gönderimi (`xrWaitFrame` / `xrBeginFrame` / `xrEndFrame`) | planlandı |
+| `xrCreateInstance` / `xrCreateSession`, `XR_KHR_vulkan_enable2` ile Vulkan cihazı, olay sorgulama ve olaylarla ilerleyen oturum durum makinesi, `xrLocateSpace` / `xrLocateViews` | tamam (Quest 3S: 72 Hz'de FOCUSED) |
+| Kare döngüsü (yerel bir zamanlayıcı iş parçacığında `xrWaitFrame`, bir renderer bağlanana kadar boş kareler) | tamam |
+| Filament ile swapchain oluşturma ve kare gönderimi | planlandı |
 | Aksiyonların etkileşim profillerine bağlanması (`xrSuggestInteractionProfileBindings`, `xrSyncActions`), gerçek titreşim | planlandı |
-| Android (bağımsız Meta Quest) yerel yolu | planlandı (Android bugün benzetimli arka uçla çalışır) |
+| Android (bağımsız Meta Quest) yerel yolu: Maven Central'dan Khronos yükleyicisi, Kotlin parçasının (`OpenXrPlugin`) ilettiği activity | tamam |
+| `package:lumina_plugin_openxr/runtime.dart`: bir oyunun içe aktardığı, editör kodu içermeyen kütüphane | tamam |
 
 ## Özellikler
 
@@ -397,9 +400,11 @@ src/              openxr_bridge_c.h / .cpp (C API, FFI_PLUGIN_EXPORT)
 | OpenXR | metre | sağ el kuralı, X sağ, Y yukarı, −Z ileri |
 | Lumina (saklanan dönüşümler) | santimetre (bir dünya birimi = 1 cm) | Z yukarı |
 
-`OpenXrSpaceConverter`, OpenXR `(x, y, z)` metreyi `(−z, x, y) × 100` santimetreye çevirir — X ileri, Y sağ, Z
-yukarı — ve `luminaToOpenXrPosition` ile geri; `openXrToLuminaRotation` aynı taban değişimini yönelimlere uygular.
-HMD bileşeni aynı çerçevede çalışır (gözleri yerleştirirken +Y sağdır) ve IPD'yi metre olarak tutar. Benzetim ve
+Lumina'nın çalışma zamanı OpenXR'in eksenlerine (Y yukarı, −Z ileri, +X sağ) santimetre olarak sahiptir; bu yüzden
+`OpenXrSpaceConverter.openXrToRuntimePosition` yalnızca 100 ile ölçekler ve `openXrToRuntimeRotation` dönüşü korur;
+HMD ve kontrolcü bileşenleri bunları kullanır. Saklanan (yazım) dönüşümleri Z yukarıdır ve `LuminaAxes` üzerinden
+geçer: `openXrToLuminaPosition` yazım konumunu `(x, −z, y) × 100` olarak verir (ileri +Y, yukarı +Z),
+`luminaToOpenXrPosition` geri dönüşü, `openXrToLuminaRotation` ise yönelimler için aynı taban değişimini. Benzetim ve
 stereo matematiği, çalışma zamanının bildirdiği gibi OpenXR metresinde kalır.
 
 ## Testler
@@ -449,18 +454,15 @@ olarak çalıştırır (`../openxr` değilse `LUMINA_OPENXR_DIR`'i ayarlayın).
 
 ## Sınırlamalar ve yol haritası
 
-- Köprü üzerinden henüz `XrInstance`, `XrSession`, uzay konumu, swapchain ya da kare gönderimi yok; çalışma zamanı
-  olan bir makinede oturum yükleyici açıldığında `focused` bildirir, pozlar sizin kodunuzdan ya da benzetimden gelir.
+- Swapchain ve Filament render'ı gelene kadar kareler boş gönderilir (sıradaki adım).
 - `OpenXrActionSet.sync()` henüz çalışma zamanını okumuyor; kontrolcü durumlarını çağıran doldurur.
   `playHapticPulse` isteği (`lastHapticPulse`) kaydeder ama bir cihaza göndermez.
 - OpenXR panelinde seçilen stereo modu henüz eklentinin `OpenXrFilamentBridge`'ine aktarılmıyor.
-- `OpenXrSpaceConverter` kendi ileri eksenini (+X) kullanıyor; motorun yazım çerçevesiyle (`LuminaAxes`) hizalanması
-  planlandı.
-- Android / bağımsız Meta Quest derlemeleri, köprü Android için derlenip yüklenene kadar benzetimli arka ucu kullanır.
+- Yerel yol geliştirilirken bir PC çalışma zamanı yoktu; masaüstü köprüsü derleniyor ve bir çalışma zamanını aynı
+  şekilde buluyor, ancak yalnızca Quest üzerinde çalıştı.
 
-Sıradakiler: gerekli uzantılarla instance ve oturum oluşturma, bileşenleri besleyen `xrLocateViews` /
-`xrLocateSpace`, Filament ile paylaşılan swapchain görüntüleri, gerçek titreşimle etkileşim profili başına aksiyon
-bağlamaları ve Android yükleyici yolu.
+Sıradakiler: Filament ile paylaşılan swapchain görüntüleri (multiview) ve kare gönderimi, ardından gerçek titreşimle
+etkileşim profili başına aksiyon bağlamaları.
 
 ## Katkı
 

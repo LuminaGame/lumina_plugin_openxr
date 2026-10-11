@@ -11,7 +11,10 @@ void main() {
 
       final beginRes = session.beginSession();
       expect(beginRes.isSuccess, isTrue);
+      // The simulated runtime posts READY, then SYNCHRONIZED, VISIBLE and FOCUSED once the session began.
       expect(session.state, equals(OpenXrSessionState.focused));
+      expect(session.machine.history,
+          [OpenXrSessionState.ready, OpenXrSessionState.synchronized, OpenXrSessionState.visible, OpenXrSessionState.focused]);
 
       session.setTrackingOrigin(OpenXrTrackingOrigin.eyeLevel);
       expect(session.trackingOrigin, equals(OpenXrTrackingOrigin.eyeLevel));
@@ -25,9 +28,9 @@ void main() {
       // 1 meter forward in OpenXR is (0, 0, -1)
       final openXrForward = vm.Vector3(0.0, 0.0, -1.0);
       final luminaForward = OpenXrSpaceConverter.openXrToLuminaPosition(openXrForward);
-      // In Lumina, forward is +X, 100 cm
-      expect(luminaForward.x, closeTo(100.0, 0.001));
-      expect(luminaForward.y, closeTo(0.0, 0.001));
+      // In Lumina's authoring axes (LuminaAxes) forward is +Y, 100 cm
+      expect(luminaForward.x, closeTo(0.0, 0.001));
+      expect(luminaForward.y, closeTo(100.0, 0.001));
       expect(luminaForward.z, closeTo(0.0, 0.001));
 
       // 1.5 meters up in OpenXR is (0, 1.5, 0)

@@ -22,14 +22,15 @@ class LuminaXRHMDComponent extends LuminaSceneComponent {
   Vector3 get leftEyeLocation => _leftEyeLocation;
   Vector3 get rightEyeLocation => _rightEyeLocation;
 
-  /// Updates HMD pose from raw OpenXR tracking vectors (metres, Y-up).
+  /// Updates the HMD pose from an OpenXR pose (metres). Lumina's runtime has
+  /// OpenXR's axes (Y up, -Z forward, +X right) in centimetres.
   void updatePoseFromOpenXr(Vector3 openXrPosition, Quaternion openXrOrientation) {
-    location = OpenXrSpaceConverter.openXrToLuminaPosition(openXrPosition);
-    rotation = OpenXrSpaceConverter.openXrToLuminaRotation(openXrOrientation);
+    location = OpenXrSpaceConverter.openXrToRuntimePosition(openXrPosition);
+    rotation = OpenXrSpaceConverter.openXrToRuntimeRotation(openXrOrientation);
     _recalculateEyeOffsets();
   }
 
-  /// Updates HMD pose directly in Lumina world space (centimetres, Z-up).
+  /// Updates the HMD pose directly in Lumina runtime space (centimetres, Y up).
   void updatePoseLumina(Vector3 luminaLocation, Quaternion luminaRotation) {
     location = luminaLocation;
     rotation = luminaRotation;
@@ -38,7 +39,8 @@ class LuminaXRHMDComponent extends LuminaSceneComponent {
 
   void _recalculateEyeOffsets() {
     final halfIpdCm = (interPupillaryDistance * 100.0) / 2.0;
-    final rightDir = rotation.rotate(Vector3(0.0, 1.0, 0.0)); // +Y is right in Lumina
+    // +X is right in the runtime; rotateVector applies the rotation (Quaternion.rotate applies its inverse).
+    final rightDir = rotation.rotateVector(Vector3(1.0, 0.0, 0.0));
     _leftEyeLocation.setFrom(location - (rightDir * halfIpdCm));
     _rightEyeLocation.setFrom(location + (rightDir * halfIpdCm));
   }

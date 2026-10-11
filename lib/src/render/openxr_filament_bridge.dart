@@ -1,9 +1,32 @@
-import 'package:flutter_filament/flutter_filament.dart';
+import 'package:flutter_filament/filament.dart';
 import 'package:logging/logging.dart';
+import 'package:lumina_plugin_openxr/src/backend/openxr_native_backend.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 import 'package:lumina_plugin_openxr/src/render/openxr_stereo_view.dart';
 
 final _log = Logger('OpenXrFilamentBridge');
+
+/// flutter_filament's device-info functions, for [OpenXrSession.vulkanDeviceInfo]:
+/// the runtime's Vulkan device is created with what Filament needs.
+OpenXrVulkanDeviceInfoFunctions openXrFilamentDeviceInfo() => OpenXrVulkanDeviceInfoFunctions(
+      create: ExternalVulkanDeviceInfoFunctions.create,
+      createInfo: ExternalVulkanDeviceInfoFunctions.createInfo,
+      queueFamily: ExternalVulkanDeviceInfoFunctions.queueFamily,
+      filamentQueueIndex: ExternalVulkanDeviceInfoFunctions.filamentQueueIndex,
+      multiview: ExternalVulkanDeviceInfoFunctions.multiview,
+      destroy: ExternalVulkanDeviceInfoFunctions.destroy,
+    );
+
+/// The context `FilamentEngine.createOnExternalVulkan` adopts: the runtime's
+/// device, Filament on its own queue.
+ExternalVulkanContext openXrFilamentContext(OpenXrVulkanDevice device) => ExternalVulkanContext(
+      instance: device.instance,
+      physicalDevice: device.physicalDevice,
+      device: device.device,
+      queueFamily: device.queueFamily,
+      queueIndex: device.rendererQueueIndex,
+      multiview: device.multiview,
+    );
 
 /// Adapts OpenXR stereo views to Google Filament's stereoscopic rendering pipeline.
 class OpenXrFilamentBridge {

@@ -40,12 +40,13 @@ class LuminaXRControllerComponent extends LuminaSceneComponent {
     Vector3? openXrAimPos,
     Quaternion? openXrAimRot,
   }) {
-    location = OpenXrSpaceConverter.openXrToLuminaPosition(openXrGripPos);
-    rotation = OpenXrSpaceConverter.openXrToLuminaRotation(openXrGripRot);
+    // Lumina's runtime has OpenXR's axes, in centimetres.
+    location = OpenXrSpaceConverter.openXrToRuntimePosition(openXrGripPos);
+    rotation = OpenXrSpaceConverter.openXrToRuntimeRotation(openXrGripRot);
 
     if (openXrAimPos != null && openXrAimRot != null) {
-      aimLocation.setFrom(OpenXrSpaceConverter.openXrToLuminaPosition(openXrAimPos));
-      aimRotation = OpenXrSpaceConverter.openXrToLuminaRotation(openXrAimRot);
+      aimLocation.setFrom(OpenXrSpaceConverter.openXrToRuntimePosition(openXrAimPos));
+      aimRotation = OpenXrSpaceConverter.openXrToRuntimeRotation(openXrAimRot);
     } else {
       aimLocation.setFrom(location);
       aimRotation = rotation;
