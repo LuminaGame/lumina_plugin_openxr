@@ -373,6 +373,7 @@ int32_t openxr_bridge_request_exit_session(void) {
 
 int32_t openxr_bridge_destroy_session(void) {
     openxr_bridge_frame_loop_stop();
+    openxr_bridge_destroy_swapchain();
     State& s = state();
     for (auto& space : s.spaces) {
         if (space.handle != XR_NULL_HANDLE) fn<PFN_xrDestroySpace>("xrDestroySpace")(space.handle);
@@ -402,6 +403,36 @@ int32_t openxr_bridge_destroy_instance(void) {
     s.instance = XR_NULL_HANDLE;
     s.system = XR_NULL_SYSTEM_ID;
     s.enabledExtensions.clear();
+    return r;
+}
+
+uint32_t openxr_bridge_display_refresh_rates(float* out, uint32_t capacity) {
+    State& s = state();
+    auto enumerate = fn<PFN_xrEnumerateDisplayRefreshRatesFB>("xrEnumerateDisplayRefreshRatesFB");
+    if (s.session == XR_NULL_HANDLE || !enumerate) return 0;
+    uint32_t count = 0;
+    if (XR_FAILED(enumerate(s.session, 0, &count, nullptr))) return 0;
+    std::vector<float> rates(count);
+    enumerate(s.session, count, &count, rates.data());
+    for (uint32_t i = 0; i < count && i < capacity && out; ++i) out[i] = rates[i];
+    return count;
+}
+
+float openxr_bridge_display_refresh_rate(void) {
+    State& s = state();
+    auto get = fn<PFN_xrGetDisplayRefreshRateFB>("xrGetDisplayRefreshRateFB");
+    float hz = 0;
+    if (s.session != XR_NULL_HANDLE && get) get(s.session, &hz);
+    return hz;
+}
+
+int32_t openxr_bridge_request_display_refresh_rate(float hz) {
+    State& s = state();
+    auto request = fn<PFN_xrRequestDisplayRefreshRateFB>("xrRequestDisplayRefreshRateFB");
+    if (s.session == XR_NULL_HANDLE || !request) return fail(XR_ERROR_EXTENSION_NOT_PRESENT, "XR_FB_display_refresh_rate");
+    XrResult r = request(s.session, hz);
+    if (XR_FAILED(r)) return fail(r, "xrRequestDisplayRefreshRateFB");
+    log("display refresh rate %.0f Hz requested", hz);
     return r;
 }
 

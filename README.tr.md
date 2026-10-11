@@ -25,6 +25,7 @@ benzetimli bir başlık.
 - [Kendi sürecinde çalışır](#kendi-sürecinde-çalışır)
 - [Gözlük olmadan çalışmak](#gözlük-olmadan-çalışmak)
 - [Mimari](#mimari)
+- [Kare döngüsü](#kare-döngüsü)
 - [Koordinat sistemleri ve birimler](#koordinat-sistemleri-ve-birimler)
 - [Testler](#testler)
 - [Sorun giderme](#sorun-giderme)
@@ -51,7 +52,7 @@ Tablo şu an neyin çalıştığını gösteriyor.
 | Editör menüleri, OpenXR paneli (bir editör paneli Widget Blueprint'i), durum çubuğu düğmesi, MCP tanılama aracı | tamam |
 | `xrCreateInstance` / `xrCreateSession`, `XR_KHR_vulkan_enable2` ile Vulkan cihazı, olay sorgulama ve olaylarla ilerleyen oturum durum makinesi, `xrLocateSpace` / `xrLocateViews` | tamam (Quest 3S: 72 Hz'de FOCUSED) |
 | Kare döngüsü (yerel bir zamanlayıcı iş parçacığında `xrWaitFrame`, bir renderer bağlanana kadar boş kareler) | tamam |
-| Filament ile swapchain oluşturma ve kare gönderimi | planlandı |
+| Çalışma zamanının Vulkan cihazında swapchain, iki gözü (multiview) ona render eden Filament, projeksiyon katmanıyla kare gönderimi; `OpenXrFrameLoop`, `LuminaXRWorldDriver` | tamam (Quest 3S: 72 Hz, < %0,1 geç kare) |
 | Aksiyonların etkileşim profillerine bağlanması (`xrSuggestInteractionProfileBindings`, `xrSyncActions`), gerçek titreşim | planlandı |
 | Android (bağımsız Meta Quest) yerel yolu: Maven Central'dan Khronos yükleyicisi, Kotlin parçasının (`OpenXrPlugin`) ilettiği activity | tamam |
 | `package:lumina_plugin_openxr/runtime.dart`: bir oyunun içe aktardığı, editör kodu içermeyen kütüphane | tamam |
@@ -393,6 +394,43 @@ src/              openxr_bridge_c.h / .cpp (C API, FFI_PLUGIN_EXPORT)
   çizim için yapılandırır (`OpenXrSwapchainDescriptor.arraySize` ile uyumlu, 2 katmanlı doku dizisine tek geçiş) ya da
   `separateViews` ile göz başına sıradan bir geçiş yapılır.
 
+## Kare döngüsü
+
+`xrWaitFrame` bloklar, bu yüzden hiçbir zaman bir Dart isolate'inde çalışmaz:
+
+1. **Zamanlayıcı** (köprüdeki yerel bir iş parçacığı) her kareyi bekler, gözleri oturumun referans uzayında öngörülen
+   gösterim zamanı için konumlar ve `(predictedDisplayTime, shouldRender, frame)` bilgisini bir
+   `NativeCallable.listener` üzerinden UI isolate'ine gönderir (`OpenXrNativePacer`). Çalışma zamanının render
+   istemediği bir kareyi zamanlayıcı kendisi boş olarak başlatıp bitirir.
+2. **UI isolate'i** (`OpenXrFrameLoop`) görünümleri rig'e verir (`LuminaXRWorldDriver` bu karenin baş pozunu origin'in
+   HMD bileşenine koyar), dünyayı çalışma zamanının deltasıyla tick'ler ve render eder.
+3. **Renderer** (`OpenXrFilamentRenderer`) Filament'i çalışma zamanının kendi Vulkan cihazında çalıştırır
+   (`XR_KHR_vulkan_enable2`; cihaz flutter_filament'in cihaz bilgisiyle, çalışma zamanı için bir, Filament için bir
+   kuyrukla oluşturulur) ve iki gözü tek multiview geçişte 2 katmanlı bir sRGB swapchain görüntüsüne çizer.
+   Filament'in sürücü iş parçacığı OpenXR karesini görüntüyü aldığında başlatır ve bıraktığında bir projeksiyon
+   katmanıyla bitirir; böylece `xrEndFrame`, flush gerekmeden karenin GPU gönderiminden sonra gelir.
+
+```dart
+final session = OpenXrSession(backend: OpenXrBindings.instance.native)
+  ..vulkanDeviceInfo = openXrFilamentDeviceInfo();
+OpenXrFrameLoop? loop;
+session.onSessionBegan = () {
+  final renderer = OpenXrFilamentRenderer.create(OpenXrBindings.instance.native,
+      spaceType: session.referenceSpaceType)!;
+  // sahneyi renderer.scene içinde kurun (renderer.engine)
+  loop = OpenXrFrameLoop(pacer: OpenXrNativePacer(OpenXrBindings.instance.native), renderer: renderer)..start();
+};
+session.onSessionEnding = () => loop?.stop();
+session.beginSession();
+// session.pollEvents()'i bir zamanlayıcıyla sorgulayın
+```
+
+Benzetimli başlığın kendi zamanlayıcısı vardır (`OpenXrSimulatedPacer`) ve `OpenXrFilamentRenderer.onSwapChain` aynı
+şekilde herhangi bir swapchain'e render eder (masaüstü smoke, flutter_filament'in `ExternalVulkanOffscreen`'ini
+kullanır). `example/` bir başlık için ayağa kaldırma uygulamasıdır: dönen küpler, her 5 sn'de loglanan kare
+istatistikleri (`--dart-define=XR_REFRESH_RATE=90` başka bir hız ister). Quest 3S'te kare başına yaklaşık 0,25 ms Dart
+CPU ve 0,7 ms GPU ile 72 Hz'de çalışır.
+
 ## Koordinat sistemleri ve birimler
 
 | | Birim | Eksenler |
@@ -422,6 +460,16 @@ flutter test test/editor_panel_asset_test.dart
 flutter test test/architecture/no_legacy_ui_test.dart
 flutter test test/pack_plugin_test.dart
 flutter test test/xr_types_library_test.dart
+flutter test test/openxr_session_state_machine_test.dart
+flutter test test/openxr_stereo_view_test.dart
+flutter test test/openxr_space_converter_test.dart
+flutter test test/runtime_import_graph_test.dart
+flutter test test/hook_android_test.dart
+flutter test test/openxr_frame_loop_test.dart
+flutter test test/openxr_eye_camera_test.dart
+flutter test test/xr_world_driver_test.dart
+flutter test test/openxr_multiview_choice_test.dart
+dart run tool/smoke_report.dart test/smoke/openxr_frame_loop_smoke_test.dart --no-dashboard
 flutter analyze
 ```
 
@@ -454,15 +502,16 @@ olarak çalıştırır (`../openxr` değilse `LUMINA_OPENXR_DIR`'i ayarlayın).
 
 ## Sınırlamalar ve yol haritası
 
-- Swapchain ve Filament render'ı gelene kadar kareler boş gönderilir (sıradaki adım).
+- Yalnızca multiview düzeni render ediliyor; göz başına geri düşüş (iki swapchain, iki view) `OpenXrStereoLayout`
+  tarafından seçiliyor ama henüz çizilmiyor. Quest 3S multiview destekliyor.
+- İstenen bir yenileme hızı (`requestDisplayRefreshRate(90)`) kabul edildi, ancak kimse takmıyorken Quest 72 Hz'de kaldı.
 - `OpenXrActionSet.sync()` henüz çalışma zamanını okumuyor; kontrolcü durumlarını çağıran doldurur.
   `playHapticPulse` isteği (`lastHapticPulse`) kaydeder ama bir cihaza göndermez.
 - OpenXR panelinde seçilen stereo modu henüz eklentinin `OpenXrFilamentBridge`'ine aktarılmıyor.
 - Yerel yol geliştirilirken bir PC çalışma zamanı yoktu; masaüstü köprüsü derleniyor ve bir çalışma zamanını aynı
   şekilde buluyor, ancak yalnızca Quest üzerinde çalıştı.
 
-Sıradakiler: Filament ile paylaşılan swapchain görüntüleri (multiview) ve kare gönderimi, ardından gerçek titreşimle
-etkileşim profili başına aksiyon bağlamaları.
+Sıradakiler: gerçek titreşimle etkileşim profili başına aksiyon bağlamaları, ardından passthrough.
 
 ## Katkı
 

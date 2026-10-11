@@ -16,7 +16,13 @@ export 'package:lumina_plugin_openxr/src/ffi/openxr_bridge_ffi.dart' show OpenXr
 export 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
 export 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 export 'package:lumina_plugin_openxr/src/ffi/simulated_openxr_backend.dart';
+export 'package:lumina_plugin_openxr/src/frame/lumina_xr_world_driver.dart';
+export 'package:lumina_plugin_openxr/src/frame/openxr_frame_loop.dart';
+export 'package:lumina_plugin_openxr/src/frame/openxr_pacers.dart';
+export 'package:lumina_plugin_openxr/src/render/openxr_eye_camera.dart';
 export 'package:lumina_plugin_openxr/src/render/openxr_filament_bridge.dart';
+export 'package:lumina_plugin_openxr/src/render/openxr_filament_renderer.dart';
+export 'package:lumina_plugin_openxr/src/render/openxr_stereo_layout.dart';
 export 'package:lumina_plugin_openxr/src/render/openxr_stereo_view.dart';
 export 'package:lumina_plugin_openxr/src/render/openxr_swapchain.dart';
 export 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';

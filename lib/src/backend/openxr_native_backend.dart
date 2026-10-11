@@ -259,6 +259,72 @@ class OpenXrNativeBackend implements OpenXrBackend {
 
   void stopFrameLoop() => OpenXrErrorReporter.guard('stopFrameLoop', b.openxr_bridge_frame_loop_stop, null);
 
+  /// The swapchain formats the runtime offers (VkFormat values), preferred first.
+  List<int> get swapchainFormats => OpenXrErrorReporter.guard('swapchainFormats', () => using((arena) {
+        final out = arena<Int64>(32);
+        final n = b.openxr_bridge_swapchain_formats(out, 32);
+        return [for (var i = 0; i < n && i < 32; i++) out[i]];
+      }), const <int>[]);
+
+  /// The compositor swapchain the renderer draws into ([layers] 2: one
+  /// multiview image, layer i = eye i).
+  XrResult createSwapchain({required int width, required int height, required int layers, required int format}) =>
+      _result('openxr_bridge_create_swapchain', () => b.openxr_bridge_create_swapchain(width, height, layers, format));
+
+  /// The swapchain as a flutter_filament external swapchain provider
+  /// (`filament_external_swapchain_provider*`), owned by the bridge.
+  Pointer<Void> get swapchainProvider =>
+      OpenXrErrorReporter.guard('swapchainProvider', b.openxr_bridge_swapchain_provider, nullptr);
+
+  void destroySwapchain() => OpenXrErrorReporter.guard('destroySwapchain', b.openxr_bridge_destroy_swapchain, null);
+
+  /// Hands the frames the runtime wants rendered to the renderer (views located
+  /// in reference space [spaceType]); false goes back to empty frames.
+  XrResult setRenderer(bool render, int spaceType) {
+    final id = space(spaceType);
+    if (id == null) return XrResult.errorHandleInvalid;
+    return _result('openxr_bridge_frame_loop_set_renderer', () => b.openxr_bridge_frame_loop_set_renderer(render, id));
+  }
+
+  /// The views of [frame] as the pacer located them for its predicted display
+  /// time (empty when that frame is gone or untracked).
+  List<OpenXrEyeView> frameViews(int frame) => OpenXrErrorReporter.guard('frameViews', () => using((arena) {
+        final out = arena<b.OpenXrBridgeView>(2);
+        final n = b.openxr_bridge_frame_views(frame, out, 2);
+        return [
+          for (var i = 0; i < n; i++)
+            OpenXrEyeView(
+              position: _position(out[i].pose),
+              orientation: _orientation(out[i].pose),
+              angleLeft: out[i].angleLeft,
+              angleRight: out[i].angleRight,
+              angleUp: out[i].angleUp,
+              angleDown: out[i].angleDown,
+            ),
+        ];
+      }), const <OpenXrEyeView>[]);
+
+  /// The renderer will not render [frame]: the bridge ends it empty.
+  void skipFrame(int frame) => OpenXrErrorReporter.guard('skipFrame', () => b.openxr_bridge_skip_frame(frame), null);
+
+  /// The display refresh rates (Hz) the headset offers (XR_FB_display_refresh_rate).
+  List<double> get displayRefreshRates => OpenXrErrorReporter.guard('displayRefreshRates', () => using((arena) {
+        final out = arena<Float>(16);
+        final n = b.openxr_bridge_display_refresh_rates(out, 16);
+        return [for (var i = 0; i < n && i < 16; i++) out[i]];
+      }), const <double>[]);
+
+  /// The current display refresh rate (Hz), 0 when unknown.
+  double get displayRefreshRate =>
+      OpenXrErrorReporter.guard('displayRefreshRate', b.openxr_bridge_display_refresh_rate, 0.0);
+
+  /// Asks the runtime for [hz] (one of [displayRefreshRates]).
+  XrResult requestDisplayRefreshRate(double hz) =>
+      _result('openxr_bridge_request_display_refresh_rate', () => b.openxr_bridge_request_display_refresh_rate(hz));
+
+  /// Frames ended with a projection layer.
+  int get renderedFrames => OpenXrErrorReporter.guard('renderedFrames', b.openxr_bridge_rendered_frames, 0);
+
   /// Frames waited, ended empty, missed by the renderer, and the predicted display period.
   ({int frames, int empty, int missed, Duration period}) get frameStats =>
       OpenXrErrorReporter.guard('frameStats', () => using((arena) {

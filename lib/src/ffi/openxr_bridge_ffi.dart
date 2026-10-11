@@ -181,3 +181,36 @@ external void openxr_bridge_frame_loop_stats(
 
 @Native<Int64 Function()>()
 external int openxr_bridge_last_predicted_display_time();
+
+@Native<Int64 Function(Pointer<Int64>, Uint32)>()
+external int openxr_bridge_swapchain_formats(Pointer<Int64> out, int capacity);
+
+@Native<Int32 Function(Uint32, Uint32, Uint32, Int64)>()
+external int openxr_bridge_create_swapchain(int width, int height, int arraySize, int format);
+
+@Native<Pointer<Void> Function()>()
+external Pointer<Void> openxr_bridge_swapchain_provider();
+
+@Native<Void Function()>()
+external void openxr_bridge_destroy_swapchain();
+
+@Native<Int32 Function(Bool, Int64)>()
+external int openxr_bridge_frame_loop_set_renderer(bool render, int space);
+
+@Native<Uint32 Function(Int64, Pointer<OpenXrBridgeView>, Uint32)>()
+external int openxr_bridge_frame_views(int frame, Pointer<OpenXrBridgeView> out, int capacity);
+
+@Native<Void Function(Int64)>()
+external void openxr_bridge_skip_frame(int frame);
+
+@Native<Int64 Function()>()
+external int openxr_bridge_rendered_frames();
+
+@Native<Uint32 Function(Pointer<Float>, Uint32)>()
+external int openxr_bridge_display_refresh_rates(Pointer<Float> out, int capacity);
+
+@Native<Float Function()>()
+external double openxr_bridge_display_refresh_rate();
+
+@Native<Int32 Function(Float)>()
+external int openxr_bridge_request_display_refresh_rate(double hz);

@@ -27,6 +27,14 @@ struct FrameLoop {
     /// The renderer called xrBeginFrame for the pending frame.
     std::atomic<bool> frameBegun{false};
 
+    /// The space the views are located in and the projection layer lives in.
+    XrSpace space = XR_NULL_HANDLE;
+    /// The views of the pending frame, located by the pacer at its predicted display time.
+    XrView views[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
+    uint32_t viewCount = 0;
+    bool viewsValid = false;
+    int64_t renderedFrames = 0;
+
     int64_t frameIndex = 0;
     int64_t emptyFrames = 0;
     int64_t missedFrames = 0;

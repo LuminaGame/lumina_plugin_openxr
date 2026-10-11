@@ -51,6 +51,11 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   test: ^1.24.0
   archive: ^4.2.0
+  lumina_smoke:
+    git:
+      url: https://github.com/LuminaGame/tools.git
+      path: lumina_smoke
+      ref: 06c83844da1339424b17bc5d220092818786f565
 
 hooks:
   user_defines:

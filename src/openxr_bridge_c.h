@@ -166,6 +166,12 @@ typedef struct openxr_bridge_view {
 FFI_PLUGIN_EXPORT int32_t openxr_bridge_locate_views(int64_t base, int64_t time, openxr_bridge_view* out,
         uint32_t capacity, uint32_t* count, uint64_t* view_state_flags);
 
+/// XR_FB_display_refresh_rate: the rates the display offers (Hz), the current
+/// one, and a request for [hz]. 0 / an error when the extension is missing.
+FFI_PLUGIN_EXPORT uint32_t openxr_bridge_display_refresh_rates(float* out, uint32_t capacity);
+FFI_PLUGIN_EXPORT float openxr_bridge_display_refresh_rate(void);
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_request_display_refresh_rate(float hz);
+
 // ---------------------------------------------------------------------------
 // The frame loop (a native pacer thread: xrWaitFrame blocks).
 
@@ -185,6 +191,36 @@ FFI_PLUGIN_EXPORT bool openxr_bridge_frame_loop_running(void);
 FFI_PLUGIN_EXPORT void openxr_bridge_frame_loop_stats(int64_t* frames, int64_t* empty_frames,
         int64_t* missed_frames, int64_t* predicted_period);
 FFI_PLUGIN_EXPORT int64_t openxr_bridge_last_predicted_display_time(void);
+
+// ---------------------------------------------------------------------------
+// The swapchain and the renderer's frames.
+
+/// The swapchain formats the runtime offers (VkFormat values), preferred first;
+/// returns how many there are.
+FFI_PLUGIN_EXPORT int64_t openxr_bridge_swapchain_formats(int64_t* out, uint32_t capacity);
+/// The compositor swapchain the renderer draws into: [array_size] 2 for
+/// multiview (layer i = eye i), plus a depth image the bridge makes.
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_create_swapchain(uint32_t width, uint32_t height, uint32_t array_size,
+        int64_t format);
+/// A filament_external_swapchain_provider for the swapchain (flutter_filament's
+/// src/external_vulkan_c.h), owned by the bridge: acquire begins the frame and
+/// takes the next image, present releases it and ends the frame with a
+/// projection layer. Null without a swapchain.
+FFI_PLUGIN_EXPORT const void* openxr_bridge_swapchain_provider(void);
+FFI_PLUGIN_EXPORT void openxr_bridge_destroy_swapchain(void);
+
+/// From now on frames the runtime wants rendered go to the renderer: the pacer
+/// locates the views in [space] (a reference space id) and waits until the
+/// renderer's present ended the frame. False goes back to empty frames.
+FFI_PLUGIN_EXPORT int32_t openxr_bridge_frame_loop_set_renderer(bool render, int64_t space);
+/// The views of [frame] (the index the frame callback got), as the pacer located
+/// them for its predicted display time; 0 when that frame is gone or the views
+/// are not tracked.
+FFI_PLUGIN_EXPORT uint32_t openxr_bridge_frame_views(int64_t frame, openxr_bridge_view* out, uint32_t capacity);
+/// The renderer will not render [frame] (Filament skipped it): end it empty.
+FFI_PLUGIN_EXPORT void openxr_bridge_skip_frame(int64_t frame);
+/// Frames the renderer ended with a projection layer.
+FFI_PLUGIN_EXPORT int64_t openxr_bridge_rendered_frames(void);
 
 #ifdef __cplusplus
 }

@@ -6,6 +6,7 @@
 #include "openxr_bridge_internal.h"
 #include "openxr_frame_internal.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -39,6 +40,7 @@ void run() {
     FrameLoop& loop = frameLoop();
     auto waitFrame = fn<PFN_xrWaitFrame>("xrWaitFrame");
     auto beginFrame = fn<PFN_xrBeginFrame>("xrBeginFrame");
+    auto locateViews = fn<PFN_xrLocateViews>("xrLocateViews");
     log("frame loop started");
     while (!loop.stop.load()) {
         XrFrameState frameState{XR_TYPE_FRAME_STATE};
@@ -61,6 +63,15 @@ void run() {
             if (loop.onFrame) loop.onFrame(frameState.predictedDisplayTime, 0, index);
             continue;
         }
+        // The views this frame is rendered with and shown at, located once for both.
+        XrViewLocateInfo locateInfo{XR_TYPE_VIEW_LOCATE_INFO};
+        locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+        locateInfo.displayTime = frameState.predictedDisplayTime;
+        locateInfo.space = loop.space;
+        XrViewState viewState{XR_TYPE_VIEW_STATE};
+        XrView located[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
+        uint32_t located_count = 0;
+        const XrResult lr = locateViews(s.session, &locateInfo, &viewState, 2, &located_count, located);
         // The renderer begins (driver thread, in the swapchain acquire), renders and ends the
         // frame (in the present); this thread waits until then before waiting for the next one.
         {
@@ -68,17 +79,23 @@ void run() {
             loop.pendingFrame = index;
             loop.pendingDisplayTime = frameState.predictedDisplayTime;
             loop.frameEnded = false;
+            loop.viewCount = XR_SUCCEEDED(lr) ? located_count : 0;
+            loop.viewsValid = XR_SUCCEEDED(lr) && (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) &&
+                    (viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT);
+            for (uint32_t i = 0; i < located_count && i < 2; ++i) loop.views[i] = located[i];
         }
         if (loop.onFrame) loop.onFrame(frameState.predictedDisplayTime, 1, index);
         std::unique_lock<std::mutex> lock(loop.mutex);
         loop.ended.wait_for(lock, std::chrono::milliseconds(250),
                 [&] { return loop.frameEnded || loop.stop.load(); });
         if (!loop.frameEnded && !loop.stop.load()) {
-            // The renderer missed the frame: end it empty so the runtime keeps its cadence.
+            // The renderer missed the frame: end it empty so the runtime keeps its cadence (a frame
+            // the driver thread already began is left to its present).
             lock.unlock();
             XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
-            if (!loop.frameBegun.exchange(false)) {
+            if (!loop.frameBegun.exchange(true)) {
                 if (XR_SUCCEEDED(beginFrame(s.session, &beginInfo))) endEmptyFrame(frameState.predictedDisplayTime);
+                loop.frameBegun.store(false);
             }
             ++loop.missedFrames;
         }
@@ -123,3 +140,65 @@ void openxr_bridge_frame_loop_stats(int64_t* frames, int64_t* empty_frames, int6
 }
 
 int64_t openxr_bridge_last_predicted_display_time(void) { return frameLoop().lastPredictedDisplayTime.load(); }
+
+int32_t openxr_bridge_frame_loop_set_renderer(bool render, int64_t space) {
+    FrameLoop& loop = frameLoop();
+    XrSpace handle = XR_NULL_HANDLE;
+    for (const auto& s : state().spaces) {
+        if (s.id == space) handle = s.handle;
+    }
+    if (render && handle == XR_NULL_HANDLE) return fail(XR_ERROR_HANDLE_INVALID, "no such space");
+    {
+        std::lock_guard<std::mutex> lock(loop.mutex);
+        loop.space = handle;
+    }
+    loop.renderer.store(render);
+    return XR_SUCCESS;
+}
+
+uint32_t openxr_bridge_frame_views(int64_t frame, openxr_bridge_view* out, uint32_t capacity) {
+    FrameLoop& loop = frameLoop();
+    std::lock_guard<std::mutex> lock(loop.mutex);
+    if (loop.pendingFrame != frame || !loop.viewsValid) return 0;
+    const uint32_t n = std::min<uint32_t>(capacity, loop.viewCount);
+    for (uint32_t i = 0; i < n && out; ++i) {
+        const XrView& v = loop.views[i];
+        out[i].pose.position[0] = v.pose.position.x;
+        out[i].pose.position[1] = v.pose.position.y;
+        out[i].pose.position[2] = v.pose.position.z;
+        out[i].pose.orientation[0] = v.pose.orientation.x;
+        out[i].pose.orientation[1] = v.pose.orientation.y;
+        out[i].pose.orientation[2] = v.pose.orientation.z;
+        out[i].pose.orientation[3] = v.pose.orientation.w;
+        out[i].pose.flags = 0;
+        out[i].angle_left = v.fov.angleLeft;
+        out[i].angle_right = v.fov.angleRight;
+        out[i].angle_up = v.fov.angleUp;
+        out[i].angle_down = v.fov.angleDown;
+    }
+    return n;
+}
+
+void openxr_bridge_skip_frame(int64_t frame) {
+    FrameLoop& loop = frameLoop();
+    {
+        std::lock_guard<std::mutex> lock(loop.mutex);
+        if (loop.pendingFrame != frame || loop.frameEnded) return;
+    }
+    State& s = state();
+    if (!loop.frameBegun.exchange(true)) {
+        XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
+        if (XR_SUCCEEDED(fn<PFN_xrBeginFrame>("xrBeginFrame")(s.session, &beginInfo))) {
+            endEmptyFrame(loop.pendingDisplayTime);
+        }
+        loop.frameBegun.store(false);
+    }
+    {
+        std::lock_guard<std::mutex> lock(loop.mutex);
+        loop.frameEnded = true;
+        ++loop.missedFrames;
+    }
+    loop.ended.notify_all();
+}
+
+int64_t openxr_bridge_rendered_frames(void) { return frameLoop().renderedFrames; }

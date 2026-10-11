@@ -24,6 +24,7 @@ spatial anchors, scene, face and eye tracking) live in
 - [Runs in its own process](#runs-in-its-own-process)
 - [Working without a headset](#working-without-a-headset)
 - [Architecture](#architecture)
+- [Frame loop](#frame-loop)
 - [Coordinate systems and units](#coordinate-systems-and-units)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
@@ -50,7 +51,7 @@ Quest 3S. The table says what works now.
 | Editor menus, the OpenXR panel (an editor panel Widget Blueprint), status bar button, MCP diagnostic tool | done |
 | `xrCreateInstance` / `xrCreateSession`, the Vulkan device through `XR_KHR_vulkan_enable2`, event polling and the event-driven session state machine, `xrLocateSpace` / `xrLocateViews` | done (Quest 3S: FOCUSED at 72 Hz) |
 | The frame loop (`xrWaitFrame` on a native pacer thread, empty frames until a renderer attaches) | done |
-| Swapchain creation and frame submission with Filament | planned |
+| Swapchain on the runtime's Vulkan device, Filament rendering both eyes (multiview) into it, frame submission with a projection layer; `OpenXrFrameLoop`, `LuminaXRWorldDriver` | done (Quest 3S: 72 Hz, < 0.1 % late frames) |
 | Action binding to interaction profiles (`xrSuggestInteractionProfileBindings`, `xrSyncActions`), real haptics | planned |
 | Android (Meta Quest standalone) native path: the Khronos loader from Maven Central, the activity handed over by the Kotlin part (`OpenXrPlugin`) | done |
 | `package:lumina_plugin_openxr/runtime.dart`: the library a game imports, free of editor code | done |
@@ -390,6 +391,43 @@ src/              openxr_bridge_c.h / .cpp (C API, FFI_PLUGIN_EXPORT)
   multiview rendering (one pass into a 2-layer texture array, matching `OpenXrSwapchainDescriptor.arraySize`), or
   `separateViews` for one ordinary pass per eye.
 
+## Frame loop
+
+`xrWaitFrame` blocks, so it never runs on a Dart isolate:
+
+1. **The pacer** (a native thread in the bridge) waits for each frame, locates the eyes in the session's reference space
+   for the predicted display time and posts `(predictedDisplayTime, shouldRender, frame)` to the UI isolate through a
+   `NativeCallable.listener` (`OpenXrNativePacer`). A frame the runtime does not want rendered is begun and ended empty
+   by the pacer itself.
+2. **The UI isolate** (`OpenXrFrameLoop`) hands the views to the rig (`LuminaXRWorldDriver` puts this frame's head pose
+   on the origin's HMD component), ticks the world with the runtime's delta, and renders.
+3. **The renderer** (`OpenXrFilamentRenderer`) runs Filament on the runtime's own Vulkan device (`XR_KHR_vulkan_enable2`;
+   the device is created with flutter_filament's device info, a queue for the runtime and one for Filament) and draws
+   both eyes in one multiview pass into a 2-layer sRGB swapchain image. Filament's driver thread begins the OpenXR
+   frame when it acquires the image and ends it with a projection layer when it releases it, so `xrEndFrame` is
+   ordered after the frame's GPU submission without a flush.
+
+```dart
+final session = OpenXrSession(backend: OpenXrBindings.instance.native)
+  ..vulkanDeviceInfo = openXrFilamentDeviceInfo();
+OpenXrFrameLoop? loop;
+session.onSessionBegan = () {
+  final renderer = OpenXrFilamentRenderer.create(OpenXrBindings.instance.native,
+      spaceType: session.referenceSpaceType)!;
+  // build the scene in renderer.scene (renderer.engine)
+  loop = OpenXrFrameLoop(pacer: OpenXrNativePacer(OpenXrBindings.instance.native), renderer: renderer)..start();
+};
+session.onSessionEnding = () => loop?.stop();
+session.beginSession();
+// poll session.pollEvents() from a timer
+```
+
+The simulated headset has a pacer of its own (`OpenXrSimulatedPacer`), and `OpenXrFilamentRenderer.onSwapChain` renders
+the same way into any swapchain (the desktop smoke uses flutter_filament's `ExternalVulkanOffscreen`).
+`example/` is the bring-up app for a headset: turning cubes, the frame statistics logged every 5 s
+(`--dart-define=XR_REFRESH_RATE=90` asks for another rate). On a Quest 3S it runs at 72 Hz with about 0.25 ms of
+Dart CPU and 0.7 ms of GPU per frame.
+
 ## Coordinate systems and units
 
 | | Units | Axes |
@@ -419,6 +457,16 @@ flutter test test/editor_panel_asset_test.dart
 flutter test test/architecture/no_legacy_ui_test.dart
 flutter test test/pack_plugin_test.dart
 flutter test test/xr_types_library_test.dart
+flutter test test/openxr_session_state_machine_test.dart
+flutter test test/openxr_stereo_view_test.dart
+flutter test test/openxr_space_converter_test.dart
+flutter test test/runtime_import_graph_test.dart
+flutter test test/hook_android_test.dart
+flutter test test/openxr_frame_loop_test.dart
+flutter test test/openxr_eye_camera_test.dart
+flutter test test/xr_world_driver_test.dart
+flutter test test/openxr_multiview_choice_test.dart
+dart run tool/smoke_report.dart test/smoke/openxr_frame_loop_smoke_test.dart --no-dashboard
 flutter analyze
 ```
 
@@ -451,15 +499,17 @@ plugin with its real process (set `LUMINA_OPENXR_DIR` when it is not `../openxr`
 
 ## Limitations and roadmap
 
-- Frames are submitted empty until the swapchain and Filament rendering land (next step).
+- Only the multiview layout renders; the per-eye fallback (two swapchains, two views) is chosen by
+  `OpenXrStereoLayout` but not drawn yet. The Quest 3S has multiview.
+- A requested refresh rate (`requestDisplayRefreshRate(90)`) was accepted but the Quest stayed at 72 Hz while nobody
+  wore it.
 - `OpenXrActionSet.sync()` does not read the runtime yet; controller states are filled by the caller.
   `playHapticPulse` records the request (`lastHapticPulse`) without sending it to a device.
 - The stereo mode chosen in the OpenXR panel is not yet pushed to the plugin's `OpenXrFilamentBridge`.
 - No PC runtime was available while the native path was built; the desktop bridge compiles and finds a runtime the
   same way, but has only run on the Quest.
 
-Planned next: swapchain images shared with Filament (multiview) and frame submission, then action bindings per
-interaction profile with real haptics.
+Planned next: action bindings per interaction profile with real haptics, then passthrough.
 
 ## Contributing
 
