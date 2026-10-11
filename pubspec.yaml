@@ -26,6 +26,12 @@ dependencies:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina
       ref: 87ca08bec43927031cb16a4297336d4d96389e35
+  # The game host an immersive game presents through (runtime module).
+  lumina_widgets:
+    git:
+      url: https://github.com/LuminaGame/lumina.git
+      path: lumina_widgets
+      ref: 87ca08bec43927031cb16a4297336d4d96389e35
   flutter_filament:
     git:
       url: https://github.com/LuminaGame/lumina.git

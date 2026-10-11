@@ -473,6 +473,18 @@ openxr eklentisi hiçbir üretici uzantısını bilmez; başka bir eklenti (Meta
 - Diğer eklentinin yerel kodu için `OpenXrNativeBackend.instanceProcAddr` / `instanceHandle` / `sessionHandle`;
   `OpenXrSession.eventListeners` her olayı alır, uzantı olaylarını `OpenXrOtherEvent(structureType, payload)` olarak.
 
+### Immersive oyunlar: `OpenXrGamePresenter`
+
+Meta Quest derlemesinde `LuminaOpenXrRuntime.register`, `OpenXrGamePresenter`'ı `LuminaGameHost.immersivePresenter` olarak kurar. Sunucu şunları yapar:
+
+- oturumu başlatır ve projenin yenileme hızını ister;
+- oyunun dünyasını runtime'ın Vulkan cihazında çalışan Filament'e bağlar (multiview), oyunu başlatır ve dünyayı kare döngüsüyle tick'ler;
+- level bir XR orijini yerleştirmemişse oyuncunun pawn'ında bir tane oluşturur;
+- iki kumandayı dünyadaki her `LuminaPoseGrabInteractor`'a kaydeder;
+- her 5 sn'de `[lumina_xr] frames … late … missed` satırı yazar (`OpenXrGameFrameReport`; `OpenXrGamePresenter.onReport` ile de alınır).
+
+Diğer runtime modülleri `OpenXrGamePresenter.extensions` (`OpenXrGameExtension`: `attach`, `onFrame`, `detach`) üzerinden her oturuma eklenir. MetaXR'ın passthrough'u bu kancayı kullanır.
+
 ## Koordinat sistemleri ve birimler
 
 | | Birim | Eksenler |

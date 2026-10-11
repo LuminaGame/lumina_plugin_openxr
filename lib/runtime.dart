@@ -37,3 +37,5 @@ export 'package:lumina_plugin_openxr/src/session/openxr_session.dart';
 export 'package:lumina_plugin_openxr/src/session/openxr_session_state_machine.dart';
 export 'package:lumina_plugin_openxr/src/session/openxr_space.dart';
 export 'package:lumina_plugin_openxr/xr_types.dart';
+export 'package:lumina_plugin_openxr/src/runtime/lumina_openxr_runtime.dart';
+export 'package:lumina_plugin_openxr/src/runtime/openxr_game_presenter.dart';

@@ -470,6 +470,18 @@ The openxr plugin knows no vendor extension; another plugin (MetaXR passthrough)
 - `OpenXrNativeBackend.instanceProcAddr` / `instanceHandle` / `sessionHandle` for the other plugin's native code;
   `OpenXrSession.eventListeners` get every event, extension events as `OpenXrOtherEvent(structureType, payload)`.
 
+### Immersive games: `OpenXrGamePresenter`
+
+On a Meta Quest build, `LuminaOpenXrRuntime.register` installs `OpenXrGamePresenter` as `LuminaGameHost.immersivePresenter`. The presenter does the following:
+
+- starts the session and asks for the project's refresh rate;
+- mounts the game's world on Filament running on the runtime's Vulkan device (multiview), begins play and ticks the world from the frame loop;
+- spawns an XR origin at the player's pawn unless the level places one;
+- registers both controllers with every `LuminaPoseGrabInteractor` in the world;
+- logs `[lumina_xr] frames … late … missed` every 5 s (`OpenXrGameFrameReport`, also on `OpenXrGamePresenter.onReport`).
+
+Other runtime modules add to every session through `OpenXrGamePresenter.extensions` (`OpenXrGameExtension`: `attach`, `onFrame`, `detach`). MetaXR's passthrough uses this hook.
+
 ## Coordinate systems and units
 
 | | Units | Axes |
