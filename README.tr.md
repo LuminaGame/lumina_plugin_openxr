@@ -335,6 +335,19 @@ yerinde yeniler. Sürecin yamadığı öğe adlarını (`OpenXrPanel.patchedElem
 `test/editor_panel_asset_test.dart` bunları, panel bloğunu ve grafiğin yalnızca sürecin yanıtladığı yöntemleri
 çağırdığını denetler.
 
+## Oyunda: runtime modülü ve Android manifesti
+
+Tanımlayıcı bir runtime modülü adlandırır (`lib/runtime.dart`, `LuminaOpenXrRuntime`). Eklenti bir projede etkinse cook paketi oyunun `pubspec.yaml` dosyasına ekler ve üretilen `main()` oyun başlamadan önce `LuminaOpenXrRuntime.register(settings)` çağırır. Bu çağrı XR Blueprint düğümlerini kaydeder. Bir Meta Quest derlemesinde (Project Settings → Packaging → Android, XR Profile *Meta Quest*) ayrıca oyun host'unun oyunu `OpenXrGamePresenter` ile gözlükte sunmasını sağlar.
+
+Tanımlayıcının `android` bölümü, bir Android derlemesinin manifestine bu eklentiden gelenlerdir:
+
+- head tracking (zorunlu);
+- `com.oculus.intent.category.VR` ve `org.khronos.openxr.intent.category.IMMERSIVE_HMD` launcher kategorileri;
+- OpenXR loader'ın broker izinleri ve queries girdileri;
+- immersive bir uygulamanın aktivite öznitelikleri (`singleTask`, yatay, yeniden boyutlanamaz, `density|navigation|uiMode` config değişiklikleri).
+
+Bkz. Lumina'nın `docs/tr/lumina_ui/android-quest-packaging.md` sayfası.
+
 ## Kendi sürecinde çalışır
 
 Manifest `"isolation": "process"` der: Lumina Studio eklentiyi kendi çalıştırılabilir dosyasının ayrı bir sürecinde

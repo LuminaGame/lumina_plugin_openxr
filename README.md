@@ -332,6 +332,19 @@ the editor-scope graph palette are there; **Run as Editor Panel** reloads it doc
 in place. Keep the element names the process patches (`OpenXrPanel.patchedElements`); `test/editor_panel_asset_test.dart`
 checks them, the panel block, and that the graph calls only methods the process answers.
 
+## In a game: the runtime module and the Android manifest
+
+The descriptor names a runtime module (`lib/runtime.dart`, `LuminaOpenXrRuntime`). When the plugin is enabled in a project, the cook adds the package to the game's `pubspec.yaml`, and the generated `main()` calls `LuminaOpenXrRuntime.register(settings)` before the game starts. That registers the XR Blueprint nodes. On a Meta Quest build (Project Settings → Packaging → Android, XR Profile *Meta Quest*), it also makes the game host present the game in the headset through `OpenXrGamePresenter`.
+
+The descriptor's `android` section is what an Android build's manifest gets from this plugin:
+
+- head tracking (required);
+- the `com.oculus.intent.category.VR` and `org.khronos.openxr.intent.category.IMMERSIVE_HMD` launcher categories;
+- the OpenXR loader's broker permissions and queries;
+- the activity attributes of an immersive app (`singleTask`, landscape, not resizeable, the `density|navigation|uiMode` config changes).
+
+See Lumina's `docs/en/lumina_ui/android-quest-packaging.md`.
+
 ## Runs in its own process
 
 The manifest says `"isolation": "process"`: Lumina Studio starts the plugin in a separate process of its own
