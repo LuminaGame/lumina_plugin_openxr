@@ -113,11 +113,6 @@ class OpenXrController {
     _changes.notifyListeners();
   }
 
-  /// The diagnostic text of the Check Runtime dialog.
-  String get diagnosticText => bindings.isNativeRuntimeAvailable
-      ? 'Active Native Runtime: ${bindings.activeRuntimeName}\nPath: ${bindings.activeRuntimePath}'
-      : 'No physical OpenXR runtime active. Using internal Simulated HMD backend for development.';
-
   PluginButtonStateSpec _statusOf() {
     final simulated = bindings.isSimulated;
     final name = bindings.activeRuntimeName;

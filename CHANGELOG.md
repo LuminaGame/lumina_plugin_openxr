@@ -5,6 +5,13 @@ All notable changes to `lumina_plugin_openxr` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- The OpenXR panel is an editor panel Widget Blueprint shipped as plugin content, `content/Editor/EPW_OpenXR.lmas`
+  (dock right, capability `process`), run by the editor's Blueprint VM: no Dart builds it and changing it needs no
+  editor build. Its graph calls the process's new `setForceSimulation`, `setTrackingOrigin`, `setStereoMode` and
+  `toggleVrPreview` methods (next to `status`; a bad value answers `bad_arguments`); the process emits `openxr.status`
+  and patches the panel's status texts on every change, and the commands that showed the declarative panel open it.
+  The manifest may contain content (`"can_contain_content": true`); `tool/pack_plugin.dart` packs it. `get_status`
+  also reports `simulation_forced`. `bin/openxr_process.dart` runs the process part on the Dart VM.
 - The process part is pure Dart: `LuminaPluginOpenxrProcess` registers the menus, the status bar button, the MCP
   tool and the OpenXR panel itself from the new `OpenXrController` (the plugin's state and actions) through
   `lumina_plugin_process`, instead of running `LuminaPluginOpenxrPlugin` through `PluginProcessAdapter`; the
@@ -28,6 +35,11 @@ All notable changes to `lumina_plugin_openxr` will be documented in this file.
 - `get_status` also returns `native_runtime_available` and `stereo_mode`.
 - `package:lumina_plugin_openxr/xr_types.dart`: the plain XR types (`LuminaXRHand`, action and input state) without
   `dart:ffi` or the OpenXR bridge; the main library still exports them.
+
+### Removed
+- The declarative OpenXR panel (`OpenXrStatusView`) and the in-process editor part: `LuminaPluginOpenxrPlugin`,
+  `OpenXrSettingsView`, `OpenXrStatusBadge` and the in-process dialogs. The plugin has no in-editor part, so it can no
+  longer be forced into the editor process.
 
 ## [0.1.0] - 2026-10-02
 

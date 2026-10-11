@@ -46,7 +46,7 @@ bridge does **not** yet create an `XrInstance` / `XrSession`, locate spaces or s
 | Session state machine, tracking origins, OpenXR ↔ Lumina pose conversion | done |
 | XR origin actor, HMD component (eye positions), controller component (grip/aim, inputs, haptics request) | done |
 | Asymmetric per-eye projection and view matrices; Filament `EngineConfig` for instanced/multiview stereo | done |
-| Editor menus, settings dialog, status bar button, MCP diagnostic tool | done |
+| Editor menus, the OpenXR panel (an editor panel Widget Blueprint), status bar button, MCP diagnostic tool | done |
 | `xrCreateInstance` / `xrCreateSession`, event polling, `xrLocateSpace` / `xrLocateViews` through the bridge | planned |
 | Swapchain creation and frame submission (`xrWaitFrame` / `xrBeginFrame` / `xrEndFrame`) | planned |
 | Action binding to interaction profiles (`xrSuggestInteractionProfileBindings`, `xrSyncActions`), real haptics | planned |
@@ -140,8 +140,9 @@ angles (`setHeadLookAngles(yaw, pitch)`), controller poses (`setControllerPose`)
 
 ### As a Lumina Studio plugin
 
-The package carries its manifest, `lumina_plugin_openxr.lmplugin` (category *Virtual Reality*, editor module
-`LuminaPluginOpenxrPlugin`). Lumina Studio scans `<project>/plugins/`, the per-user plugin folder
+The package carries its manifest, `lumina_plugin_openxr.lmplugin` (category *Virtual Reality*, one module whose
+`process_class` is `LuminaPluginOpenxrProcess`, `"can_contain_content": true` for the panel in `content/`). Lumina
+Studio scans `<project>/plugins/`, the per-user plugin folder
 (`~/.local/share/lumina/plugins/` on Linux, `%LOCALAPPDATA%\Lumina\plugins` on Windows) and the engine's built-in
 plugins.
 
@@ -273,19 +274,44 @@ Enabling the plugin adds:
 
 | Where | Item | What it does |
 |---|---|---|
+| **Plugins → OpenXR → OpenXR Panel** | opens the **OpenXR** panel | The panel's own menu item (its `menuPath`). |
 | **Plugins → OpenXR → Check Runtime** | opens the **OpenXR** panel | Shows the active runtime and its manifest path, or that the simulated headset is in use. |
 | **Plugins → OpenXR → Toggle VR Preview** | command, checked while running | Begins or ends the plugin's OpenXR session and logs it to the Output Log (source `OpenXR`). |
 | **Plugins → OpenXR → OpenXR Settings** | opens the **OpenXR** panel | Runtime and manifest, **Force Simulated Runtime** switch, tracking origin (eyeLevel / floorLevel / stage) and stereo mode choice. |
 | **Plugins → OpenXR → About OpenXR Support** | opens the **OpenXR** panel | Version and summary (the panel's collapsed About section). |
 | Status bar (right) | **XR** button | Shows the active runtime live (`XR (Sim)` or `XR: <runtime>`; green with a dot while the VR preview runs); a click opens a menu with Check Runtime, Toggle VR Preview and OpenXR Settings. |
-| **OpenXR** panel (right dock) | declarative panel | Runtime, manifest and kind; Force Simulated Runtime; tracking origin and stereo mode; session state and a Start / Stop VR Preview button; About. It follows every change, whichever menu, button or MCP client made it. |
-| MCP | `lumina_plugin_openxr.get_status` (read-only) | Returns `active_runtime`, `manifest_path`, `is_simulated`, `native_runtime_available`, `session_state`, `tracking_origin`, `stereo_mode`, `vr_preview_active`. |
+| **OpenXR** panel (right dock) | editor panel Widget Blueprint | Runtime, manifest and kind; Force Simulated Runtime; tracking origin and stereo mode; session state and a Start / Stop VR Preview button; About (collapsed). It follows every change, whichever menu, button or MCP client made it. |
+| MCP | `lumina_plugin_openxr.get_status` (read-only) | Returns `active_runtime`, `manifest_path`, `is_simulated`, `simulation_forced`, `native_runtime_available`, `session_state`, `tracking_origin`, `stereo_mode`, `vr_preview_active`. |
 
-`OpenXrStatusBadge` (a badge showing native / simulated / offline) and `OpenXrSettingsView` are exported widgets, so a
-game's own UI or another plugin can embed them. The MCP tool is reachable from any MCP client connected to Lumina
-Studio's built-in MCP server. `LuminaPluginOpenxrPlugin` still works as an ordinary in-process plugin over the same
-`OpenXrController` (a host that calls its commands with a `BuildContext` gets the Check Runtime, Settings and About
-dialogs); Lumina Studio runs the plugin in its own process, described next.
+The MCP tool is reachable from any MCP client connected to Lumina Studio's built-in MCP server.
+
+### The OpenXR panel is an asset
+
+The panel is `content/Editor/EPW_OpenXR.lmas`, an editor panel Widget Blueprint (a Widget Blueprint with an
+`editorPanel` block: title *OpenXR*, icon `glasses`, dock `right`, menu path `Plugins/OpenXR/OpenXR Panel`, capability
+`process` only). No Dart builds it: the editor finds it in the enabled plugin's `content/`, compiles its graph into
+its Blueprint VM and docks it, with no editor build. It is laid out with the editor widget set (four Editor Sections:
+Active Runtime, Tracking & Stereoscopic, VR Preview, About OpenXR Support collapsed), and its graph does:
+
+| Event | What the graph does |
+|---|---|
+| Construct | Enables the inputs when the process runs, then `Call Plugin Process ("status")` and fills every element from the answer. |
+| On Value Changed (ForceSimulation) | `setForceSimulation {value}` |
+| On Selection Changed (TrackingOrigin / StereoMode) | `setTrackingOrigin` / `setStereoMode {value}` for the user's picks (a selection the graph sets itself is ignored). |
+| On Clicked (TogglePreview) | `toggleVrPreview` |
+| Failed (any call) | a toast with the error. |
+| On Plugin Process Event (`openxr.status`) | fills every element from the event's status: the button reads Start or Stop VR Preview, primary or destructive. |
+| On Plugin Process State Changed | disables the inputs while the process is not running, refreshes when it runs again. |
+
+The process keeps the status texts (`RuntimeName`, `ManifestPath`, `RuntimeKind`, `SessionState`) current itself:
+on every change it patches them in every open instance (`PluginProcessContext.patchPanel`, no graph run) and emits
+`openxr.status`. The asset path is the panel's address there, so it lives in one constant, `OpenXrPanel.asset`.
+
+To change the panel, open the plugin from its folder (a user or project plugin being developed) and edit
+`EPW_OpenXR.lmas` in the Widget Blueprint designer: the Editor palette section, Class Settings ▸ Editor Panel and
+the editor-scope graph palette are there; **Run as Editor Panel** reloads it docked, and saving reloads an open panel
+in place. Keep the element names the process patches (`OpenXrPanel.patchedElements`); `test/editor_panel_asset_test.dart`
+checks them, the panel block, and that the graph calls only methods the process answers.
 
 ## Runs in its own process
 
@@ -295,22 +321,18 @@ cannot take the editor down.
 
 | Where | What runs there |
 |---|---|
-| Plugin process (`LuminaPluginOpenxrProcess`, the module's `process_class`) | `OpenXrController` (the plugin's state and actions, pure Dart) registered directly through `PluginProcessContext`: the OpenXR loader bridge (`dart:ffi`), `OpenXrBindings`, the session, every menu and status bar command, the `get_status` MCP tool, the OpenXR panel's events (`OpenXrStatusView`), Output Log lines. Caught native errors reported through `LuminaPluginCrashReporter` go to the editor's log under the plugin's name (the plugin process runtime forwards them). |
-| Editor | Nothing of OpenXR: the module names only a `process_class` and no `registration_class`, so the plugin has no in-editor part and the editor never opens the bridge. The editor draws the menu items, the status bar button (its state arrives as it changes) and the OpenXR panel from what the process sent. Editor code that needs the state calls the plugin's process channel: `call('status')` answers the `get_status` JSON. |
+| Plugin process (`LuminaPluginOpenxrProcess`, the module's `process_class`) | `OpenXrController` (the plugin's state and actions, pure Dart) registered directly through `PluginProcessContext`: the OpenXR loader bridge (`dart:ffi`), `OpenXrBindings`, the session, every menu and status bar command, the `get_status` MCP tool, the methods the OpenXR panel calls (`status`, `setForceSimulation`, `setTrackingOrigin`, `setStereoMode`, `toggleVrPreview`, each answering the status JSON), its `openxr.status` event and status-text patches, Output Log lines. Caught native errors reported through `LuminaPluginCrashReporter` go to the editor's log under the plugin's name (the plugin process runtime forwards them). |
+| Editor | No code of OpenXR: the module names only a `process_class` and no `registration_class`, so the plugin has no in-editor part (and the Plugin Manager offers no in-process override for it) and the editor never opens the bridge. The editor draws the menu items and the status bar button from what the process sent, and runs the OpenXR panel's graph in its Blueprint VM. Editor code that needs the state calls the plugin's process channel: `call('status')` answers the `get_status` JSON. |
 
 When the process stops (a crash, or no answer to three health checks in a row), the editor restarts it a few times,
-then marks the plugin stopped: its menu items are greyed out, the OpenXR panel shows the state with a **Restart**
-button, the Plugin Manager shows the status, the exit code and the log tail, and a plugin crash report is filed. The
+then marks the plugin stopped: its menu items are greyed out, the OpenXR panel's inputs are disabled, the plugin's
+**Restart** button appears, the Plugin Manager shows the status, the exit code and the log tail, and a plugin crash report is filed. The
 editor and the open level keep running. A restart begins with a fresh session (the VR preview is off).
 
-Debugging: to run the same process part inside the editor (breakpoints, one process), set the project override in the
-`.lmproject`:
-
-```json
-"plugin_isolation": {"lumina_plugin_openxr": "in_process"}
-```
-
-or use **Run in editor process (debugging)** in the Plugin Manager. A crash in OpenXR then affects the editor again.
+Debugging: the process part is a plain Dart program, so it runs on its own with a debugger attached:
+`dart run bin/openxr_process.dart --lumina-plugin-process lumina_plugin_openxr --lumina-plugin-port <port> ...`
+(what the editor's tests start; without the native bridge on the library path it uses the simulated runtime). With
+no `registration_class` the plugin cannot be forced into the editor process.
 
 ## Working without a headset
 
@@ -321,11 +343,11 @@ controllers have plausible poses, and inputs and haptics can be scripted from te
 
 ### Process part
 
-`LuminaPluginOpenxrProcess` and the libraries it imports (`OpenXrController`, `OpenXrStatusView`, `OpenXrBindings`,
+`LuminaPluginOpenxrProcess` and the libraries it imports (`OpenXrController`, `OpenXrPanel`, `OpenXrBindings`,
 the session and the OpenXR types) use only `lumina_plugin_process` (the plugin process API; icons are
 `PluginIconSpec` data), `ffi` and `logging` (the loader bridge) and `vector_math`: no Flutter, no `flutter_filament`,
 no `lumina_editor_api`. The bridge's `dart:ffi` calls need no Flutter. `OpenXrFilamentBridge` (the Filament stereo
-mapping, `flutter_filament`), the in-process `LuminaPluginOpenxrPlugin` with its shadcn_flutter dialogs and the engine
+mapping, `flutter_filament`) and the engine
 components (`package:lumina`) are outside the process part. `test/architecture/process_part_reach_test.dart` keeps
 it that way. The package itself still depends on Flutter, so a package that imports it (even only `xr_types.dart`)
 is Flutter-bound through it.
@@ -336,15 +358,16 @@ is Flutter-bound through it.
 lib/
   lumina_plugin_openxr.dart          public library (exports everything below)
   xr_types.dart                      plain XR types without the native bridge (LuminaXRHand, action state)
-  src/lumina_plugin_openxr_plugin.dart   in-process LuminaEditorPlugin over OpenXrController (dialogs with a BuildContext)
   src/process/    LuminaPluginOpenxrProcess (process_class), OpenXrController (state and actions, pure Dart),
-                  OpenXrStatusView (the declarative OpenXR panel)
+                  OpenXrPanel (the panel asset's address, element names, status texts)
   src/ffi/        OpenXrBindings (native bridge + simulator switch), OpenXR types/structs, SimulatedOpenXrBackend
   src/session/    OpenXrSession, OpenXrReferenceSpace, OpenXrSpaceConverter
   src/input/      action set, button/axis/vector2 state, haptics, interaction profile paths
   src/components/ LuminaXROriginActor, LuminaXRHMDComponent, LuminaXRControllerComponent, LuminaXRHand
   src/render/     OpenXrStereoView, OpenXrFilamentBridge, OpenXrSwapchainDescriptor
-  src/ui/         OpenXrSettingsView, OpenXrStatusBadge, the in-process dialogs (shadcn_flutter)
+bin/openxr_process.dart   the process part as a plain Dart program
+content/Editor/EPW_OpenXR.lmas   the OpenXR panel (editor panel Widget Blueprint)
+tool/pack_plugin.dart   packs the plugin for the Marketplace (with content/)
 hook/build.dart   Native Assets hook building the bridge
 src/              openxr_bridge_c.h / .cpp (C API, FFI_PLUGIN_EXPORT)
 ```
@@ -386,19 +409,26 @@ flutter test test/openxr_loader_and_types_test.dart
 flutter test test/openxr_session_and_spaces_test.dart
 flutter test test/openxr_stereo_render_test.dart
 flutter test test/xr_components_test.dart
-flutter test test/openxr_editor_integration_test.dart
 flutter test test/openxr_plugin_process_test.dart
+flutter test test/editor_panel_asset_test.dart
+flutter test test/architecture/no_legacy_ui_test.dart
+flutter test test/pack_plugin_test.dart
 flutter test test/xr_types_library_test.dart
 flutter analyze
 ```
 
 They cover the result codes and struct layouts, the simulation fallback, session states and tracking origins, the
 coordinate conversion, input states, the projection matrix (finite values), the Filament stereo mapping, the
-origin actor's components and the editor registration (menus and the MCP tool against a host context).
+origin actor's components.
 `openxr_plugin_process_test.dart` runs the process part with `runPluginProcessMain` against `LoopbackHost` (the
 editor's side over a real loopback socket): the contributions, the status button's live state and menu, the menu
-check mark, the OpenXR panel and its events, the MCP tool, the channel's `status`, errors answered without ending the
-process, crash reports in the editor log and a clean shutdown.
+check mark, the panel's methods (`bad_arguments` for a bad value), the `openxr.status` event and the status-text
+patches, the commands opening the editor panel, the MCP tool, errors answered without ending the process, crash
+reports in the editor log and a clean shutdown. `editor_panel_asset_test.dart` reads `EPW_OpenXR.lmas` (the panel
+block, the elements the process patches, the options and labels, the graph against the process's methods);
+`no_legacy_ui_test.dart` keeps `lib/` free of an in-editor part; `pack_plugin_test.dart` packs a copy and finds the
+panel in the zip. Lumina Studio's `test/ui/editor_panels/openxr_editor_panel_test.dart` runs this checkout as a user
+plugin with its real process (set `LUMINA_OPENXR_DIR` when it is not `../openxr`).
 
 ## Troubleshooting
 
@@ -421,8 +451,7 @@ process, crash reports in the editor log and a clean shutdown.
   simulator.
 - `OpenXrActionSet.sync()` does not read the runtime yet; controller states are filled by the caller.
   `playHapticPulse` records the request (`lastHapticPulse`) without sending it to a device.
-- The stereo mode chosen in the settings dialog is not yet pushed to the plugin's `OpenXrFilamentBridge`.
-- The status bar button has a fixed label; the live `OpenXrStatusBadge` widget is available for embedding.
+- The stereo mode chosen in the OpenXR panel is not yet pushed to the plugin's `OpenXrFilamentBridge`.
 - `OpenXrSpaceConverter` uses its own forward axis (+X); aligning it with the engine's authoring frame
   (`LuminaAxes`) is planned.
 - Android / Meta Quest standalone builds use the simulated backend until the bridge is built and loaded for Android.
@@ -435,7 +464,7 @@ haptics, and the Android loader path.
 
 Issues and pull requests are welcome. Keep the analyzer clean (`flutter analyze`), add a unit test for new
 behaviour (tests use the simulated backend; no mocks of the engine), and keep both READMEs in step (English and
-Turkish). UI uses `shadcn_flutter` widgets only, as everywhere in Lumina Studio.
+Turkish). The plugin's UI is its editor panel Widget Blueprint: change it in the designer, not in Dart.
 
 ## License
 

@@ -1,6 +1,5 @@
 library;
 
-export 'src/lumina_plugin_openxr_plugin.dart';
 export 'src/process/lumina_plugin_openxr_process.dart';
 export 'src/process/openxr_controller.dart';
 export 'src/process/openxr_panel.dart';
@@ -16,6 +15,3 @@ export 'src/components/lumina_xr_origin_actor.dart';
 export 'src/render/openxr_stereo_view.dart';
 export 'src/render/openxr_filament_bridge.dart';
 export 'src/render/openxr_swapchain.dart';
-export 'src/ui/openxr_status_badge.dart';
-export 'src/ui/openxr_settings_view.dart';
-export 'src/ui/openxr_dialogs.dart';
