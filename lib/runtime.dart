@@ -17,6 +17,7 @@ export 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
 export 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 export 'package:lumina_plugin_openxr/src/ffi/simulated_openxr_backend.dart';
 export 'package:lumina_plugin_openxr/src/frame/lumina_xr_world_driver.dart';
+export 'package:lumina_plugin_openxr/src/frame/openxr_composition.dart';
 export 'package:lumina_plugin_openxr/src/frame/openxr_frame_loop.dart';
 export 'package:lumina_plugin_openxr/src/frame/openxr_pacers.dart';
 export 'package:lumina_plugin_openxr/src/input/openxr_blueprint_nodes.dart';

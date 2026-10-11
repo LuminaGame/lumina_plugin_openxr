@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "openxr_bridge_internal.h"
 
@@ -17,7 +18,14 @@ struct FrameLoop {
     /// Set while a renderer (an external swapchain) ends the frames itself.
     std::atomic<bool> renderer{false};
     openxr_bridge_frame_callback onFrame = nullptr;
-    XrEnvironmentBlendMode blendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+    std::atomic<XrEnvironmentBlendMode> blendMode{XR_ENVIRONMENT_BLEND_MODE_OPAQUE};
+
+    /// Other plugins' layers under / over the projection layer, and the
+    /// projection layer's flags (openxr_bridge_set_frame_layers).
+    std::mutex layersMutex;
+    std::vector<const XrCompositionLayerBaseHeader*> layersBefore;
+    std::vector<const XrCompositionLayerBaseHeader*> layersAfter;
+    XrCompositionLayerFlags projectionFlags = 0;
 
     std::mutex mutex;
     std::condition_variable ended;
@@ -43,6 +51,10 @@ struct FrameLoop {
 };
 
 FrameLoop& frameLoop();
+
+/// xrEndFrame for [displayTime] with the other plugins' layers around
+/// [projection] (null: no rendered image this frame).
+XrResult endFrameWithLayers(XrTime displayTime, XrCompositionLayerProjection* projection);
 
 }  // namespace openxr_bridge
 

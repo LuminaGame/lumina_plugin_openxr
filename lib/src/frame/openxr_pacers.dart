@@ -5,6 +5,7 @@ import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
 import 'package:lumina_plugin_openxr/src/backend/openxr_native_backend.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bridge_ffi.dart' show OpenXrFrameCallbackNative;
 import 'package:lumina_plugin_openxr/src/ffi/simulated_openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/frame/openxr_composition.dart';
 import 'package:lumina_plugin_openxr/src/frame/openxr_frame_loop.dart';
 
 /// Frames from the bridge's pacer thread: it blocks in `xrWaitFrame`, locates
@@ -43,6 +44,9 @@ class OpenXrNativePacer implements OpenXrFramePacer {
 
   @override
   List<OpenXrEyeView> views(OpenXrFrame frame) => backend.frameViews(frame.index);
+
+  @override
+  void compose(OpenXrFrameComposition composition) => backend.setFrameComposition(composition);
 
   @override
   void ended(OpenXrFrame frame, {required bool rendered}) {
@@ -97,6 +101,10 @@ class OpenXrSimulatedPacer implements OpenXrFramePacer {
     log.add('begin $_index');
     onFrame(OpenXrFrame(_index, _time, shouldRender: render));
   }
+
+  /// The simulated runtime records what the frames end with.
+  @override
+  void compose(OpenXrFrameComposition composition) => simulator.compositions.add(composition);
 
   @override
   List<OpenXrEyeView> views(OpenXrFrame frame) {

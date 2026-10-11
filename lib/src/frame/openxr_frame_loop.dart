@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/frame/openxr_composition.dart';
 import 'package:lumina_plugin_openxr/src/input/openxr_input_system.dart';
 
 /// One frame the runtime handed out: its index, the predicted display time
@@ -27,6 +28,9 @@ abstract interface class OpenXrFramePacer {
   /// [frame] is done; [rendered] false when nothing was rendered (the pacer
   /// ends it empty, if the renderer has not ended it).
   void ended(OpenXrFrame frame, {required bool rendered});
+
+  /// The layers and blend mode the next frames end with (called when they change).
+  void compose(OpenXrFrameComposition composition);
 }
 
 /// Renders both eyes of a frame (both in one multiview pass, or one view
@@ -66,6 +70,17 @@ class OpenXrFrameLoop {
   /// The controllers, synced each frame before [onFrame].
   OpenXrInputSystem? input;
 
+  /// Other plugins' composition layers (passthrough, ...), asked every frame.
+  final List<OpenXrLayerContributor> layerContributors = [];
+
+  /// The environment blend mode when no contributor asks for another.
+  int environmentBlendMode = OpenXrBlendMode.opaque;
+
+  OpenXrFrameComposition _composition = const OpenXrFrameComposition();
+
+  /// What the frames end with now.
+  OpenXrFrameComposition get composition => _composition;
+
   final int historyLength;
   final Queue<OpenXrFrameTiming> _history = Queue();
   final Stopwatch _cpu = Stopwatch();
@@ -89,6 +104,15 @@ class OpenXrFrameLoop {
 
   void stop() => pacer.stop();
 
+  void _compose(OpenXrFrame frame) {
+    final next = OpenXrFrameComposition.of(layerContributors, frame.predictedDisplayTime, environmentBlendMode: environmentBlendMode);
+    if (next == _composition) return;
+    _composition = next;
+    pacer.compose(next);
+    final r = renderer;
+    if (r is OpenXrTransparencyAware) (r as OpenXrTransparencyAware).transparentBackground = next.transparentBackground;
+  }
+
   void _frame(OpenXrFrame frame) {
     _cpu
       ..reset()
@@ -100,6 +124,7 @@ class OpenXrFrameLoop {
     if (views.length == 2) onViews?.call(frame, views);
     input?.sync(frame.predictedDisplayTime);
     onFrame?.call(interval / 1e9, frame);
+    _compose(frame);
     final rendered = views.length == 2 && renderer.render(frame, views);
     pacer.ended(frame, rendered: rendered);
     _cpu.stop();

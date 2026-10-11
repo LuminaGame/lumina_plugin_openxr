@@ -5,7 +5,8 @@ sealed class OpenXrRuntimeEvent {
   const OpenXrRuntimeEvent();
 
   /// Decodes the bridge's `openxr_bridge_event` fields.
-  static OpenXrRuntimeEvent fromNative({required int kind, int state = 0, int time = 0, double value = 0, int spaceType = 0}) =>
+  static OpenXrRuntimeEvent fromNative(
+          {required int kind, int state = 0, int time = 0, double value = 0, int spaceType = 0, int structureType = 0, int payload = 0}) =>
       switch (kind) {
         1 => OpenXrSessionStateChanged(OpenXrSessionState.fromXr(state), time),
         2 => OpenXrInstanceLossPending(time),
@@ -13,7 +14,7 @@ sealed class OpenXrRuntimeEvent {
         4 => const OpenXrInteractionProfileChanged(),
         5 => const OpenXrEventsLost(),
         6 => OpenXrDisplayRefreshRateChanged(value),
-        _ => const OpenXrOtherEvent(),
+        _ => OpenXrOtherEvent(structureType: structureType, payload: payload),
       };
 }
 
@@ -73,10 +74,15 @@ final class OpenXrDisplayRefreshRateChanged extends OpenXrRuntimeEvent {
   String toString() => 'display refresh rate $hz Hz';
 }
 
-/// Any other event type.
+/// Any other event type: its `XrStructureType` and the first 64 bits after
+/// its `next` pointer, for the plugin whose extension posts it (for example
+/// `XrEventDataPassthroughStateChangedFB::flags`).
 final class OpenXrOtherEvent extends OpenXrRuntimeEvent {
-  const OpenXrOtherEvent();
+  const OpenXrOtherEvent({this.structureType = 0, this.payload = 0});
+
+  final int structureType;
+  final int payload;
 
   @override
-  String toString() => 'other event';
+  String toString() => 'other event (type $structureType)';
 }

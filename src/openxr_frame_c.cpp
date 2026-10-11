@@ -22,18 +22,32 @@ FrameLoop& frameLoop() {
     return loop;
 }
 
+XrResult endFrameWithLayers(XrTime displayTime, XrCompositionLayerProjection* projection) {
+    State& s = state();
+    FrameLoop& loop = frameLoop();
+    std::vector<const XrCompositionLayerBaseHeader*> layers;
+    {
+        std::lock_guard<std::mutex> lock(loop.layersMutex);
+        layers.insert(layers.end(), loop.layersBefore.begin(), loop.layersBefore.end());
+        if (projection) {
+            projection->layerFlags |= loop.projectionFlags;
+            layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(projection));
+        }
+        layers.insert(layers.end(), loop.layersAfter.begin(), loop.layersAfter.end());
+    }
+    XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
+    end.displayTime = displayTime;
+    end.environmentBlendMode = loop.blendMode.load();
+    end.layerCount = static_cast<uint32_t>(layers.size());
+    end.layers = layers.empty() ? nullptr : layers.data();
+    return fn<PFN_xrEndFrame>("xrEndFrame")(s.session, &end);
+}
+
 }  // namespace openxr_bridge
 
 namespace {
 
-void endEmptyFrame(XrTime displayTime) {
-    State& s = state();
-    XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
-    end.displayTime = displayTime;
-    end.environmentBlendMode = frameLoop().blendMode;
-    end.layerCount = 0;
-    fn<PFN_xrEndFrame>("xrEndFrame")(s.session, &end);
-}
+void endEmptyFrame(XrTime displayTime) { endFrameWithLayers(displayTime, nullptr); }
 
 void run() {
     State& s = state();
@@ -104,6 +118,34 @@ void run() {
 }
 
 }  // namespace
+
+void openxr_bridge_set_frame_layers(const void* const* before, uint32_t before_count, const void* const* after,
+        uint32_t after_count, uint64_t projection_flags) {
+    FrameLoop& loop = frameLoop();
+    std::lock_guard<std::mutex> lock(loop.layersMutex);
+    loop.layersBefore.clear();
+    loop.layersAfter.clear();
+    for (uint32_t i = 0; i < before_count && before; ++i) {
+        loop.layersBefore.push_back(static_cast<const XrCompositionLayerBaseHeader*>(before[i]));
+    }
+    for (uint32_t i = 0; i < after_count && after; ++i) {
+        loop.layersAfter.push_back(static_cast<const XrCompositionLayerBaseHeader*>(after[i]));
+    }
+    loop.projectionFlags = static_cast<XrCompositionLayerFlags>(projection_flags);
+    log("frame layers: %u before, %u after, projection flags 0x%llx", before_count, after_count,
+            static_cast<unsigned long long>(projection_flags));
+}
+
+void openxr_bridge_set_environment_blend_mode(int32_t mode) {
+    frameLoop().blendMode.store(static_cast<XrEnvironmentBlendMode>(mode <= 0 ? XR_ENVIRONMENT_BLEND_MODE_OPAQUE : mode));
+    log("environment blend mode %d", mode);
+}
+
+void* openxr_bridge_get_instance_proc_addr(void) { return reinterpret_cast<void*>(state().getInstanceProcAddr); }
+
+uint64_t openxr_bridge_instance_handle(void) { return reinterpret_cast<uint64_t>(state().instance); }
+
+uint64_t openxr_bridge_session_handle(void) { return reinterpret_cast<uint64_t>(state().session); }
 
 int32_t openxr_bridge_frame_loop_start(openxr_bridge_frame_callback on_frame, int32_t blend_mode) {
     FrameLoop& loop = frameLoop();

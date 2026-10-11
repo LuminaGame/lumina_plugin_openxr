@@ -7,6 +7,7 @@ import 'package:vector_math/vector_math_64.dart' as vm;
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bridge_ffi.dart' as b;
 import 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
+import 'package:lumina_plugin_openxr/src/frame/openxr_composition.dart';
 import 'package:lumina_plugin_openxr/src/input/openxr_native_input.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
 import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
@@ -193,7 +194,13 @@ class OpenXrNativeBackend implements OpenXrBackend {
         final r = b.openxr_bridge_poll_event(out);
         if (r != 1) return null;
         return OpenXrRuntimeEvent.fromNative(
-            kind: out.ref.kind, state: out.ref.state, time: out.ref.time, value: out.ref.value, spaceType: out.ref.spaceType);
+            kind: out.ref.kind,
+            state: out.ref.state,
+            time: out.ref.time,
+            value: out.ref.value,
+            spaceType: out.ref.spaceType,
+            structureType: out.ref.structureType,
+            payload: out.ref.payload);
       }), null);
 
   @override
@@ -325,6 +332,31 @@ class OpenXrNativeBackend implements OpenXrBackend {
   /// Asks the runtime for [hz] (one of [displayRefreshRates]).
   XrResult requestDisplayRefreshRate(double hz) =>
       _result('openxr_bridge_request_display_refresh_rate', () => b.openxr_bridge_request_display_refresh_rate(hz));
+
+  /// The loader's `xrGetInstanceProcAddr` (for another plugin's native code), or null.
+  Pointer<Void> get instanceProcAddr =>
+      OpenXrErrorReporter.guard('instanceProcAddr', b.openxr_bridge_get_instance_proc_addr, nullptr);
+
+  /// The `XrInstance` / `XrSession` handles (0 when there is none).
+  int get instanceHandle => OpenXrErrorReporter.guard('instanceHandle', b.openxr_bridge_instance_handle, 0);
+  int get sessionHandle => OpenXrErrorReporter.guard('sessionHandle', b.openxr_bridge_session_handle, 0);
+
+  /// The layers every frame submits around the projection layer, and its flags.
+  void setFrameComposition(OpenXrFrameComposition composition) => OpenXrErrorReporter.guard('setFrameComposition', () {
+        using((arena) {
+          Pointer<Pointer<Void>> list(List<OpenXrCompositionLayer> layers) {
+            final out = arena<Pointer<Void>>(layers.isEmpty ? 1 : layers.length);
+            for (var i = 0; i < layers.length; i++) {
+              out[i] = Pointer<Void>.fromAddress(layers[i].address);
+            }
+            return out;
+          }
+
+          b.openxr_bridge_set_frame_layers(list(composition.before), composition.before.length, list(composition.after),
+              composition.after.length, composition.projectionFlags);
+          b.openxr_bridge_set_environment_blend_mode(composition.environmentBlendMode);
+        });
+      }, null);
 
   /// Frames ended with a projection layer.
   int get renderedFrames => OpenXrErrorReporter.guard('renderedFrames', b.openxr_bridge_rendered_frames, 0);

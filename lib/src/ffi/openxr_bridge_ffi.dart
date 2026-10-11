@@ -107,6 +107,10 @@ final class OpenXrBridgeEvent extends Struct {
   external double value;
   @Int32()
   external int spaceType;
+  @Int32()
+  external int structureType;
+  @Uint64()
+  external int payload;
 }
 
 @Native<Int32 Function(Pointer<OpenXrBridgeEvent>)>()
@@ -214,3 +218,19 @@ external double openxr_bridge_display_refresh_rate();
 
 @Native<Int32 Function(Float)>()
 external int openxr_bridge_request_display_refresh_rate(double hz);
+
+@Native<Pointer<Void> Function()>()
+external Pointer<Void> openxr_bridge_get_instance_proc_addr();
+
+@Native<Uint64 Function()>()
+external int openxr_bridge_instance_handle();
+
+@Native<Uint64 Function()>()
+external int openxr_bridge_session_handle();
+
+@Native<Void Function(Pointer<Pointer<Void>>, Uint32, Pointer<Pointer<Void>>, Uint32, Uint64)>()
+external void openxr_bridge_set_frame_layers(
+    Pointer<Pointer<Void>> before, int beforeCount, Pointer<Pointer<Void>> after, int afterCount, int projectionFlags);
+
+@Native<Void Function(Int32)>()
+external void openxr_bridge_set_environment_blend_mode(int mode);

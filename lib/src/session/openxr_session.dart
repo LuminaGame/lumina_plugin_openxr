@@ -3,6 +3,7 @@ import 'package:vector_math/vector_math_64.dart' as vm;
 
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
 import 'package:lumina_plugin_openxr/src/backend/openxr_native_backend.dart';
+import 'package:lumina_plugin_openxr/src/frame/openxr_composition.dart';
 import 'package:lumina_plugin_openxr/src/input/openxr_input_bindings.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_bindings.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_error_reporter.dart';
@@ -37,6 +38,10 @@ class OpenXrSession {
 
   /// Called when the runtime asks the application to quit (EXITING).
   void Function()? onExitRequested;
+
+  /// Every polled event goes to these too (another plugin decodes its
+  /// extension's events, `OpenXrOtherEvent`).
+  final List<void Function(OpenXrRuntimeEvent event)> eventListeners = [];
 
   /// Called when the runtime switched a hand's interaction profile
   /// (`OpenXrInputSystem.refreshInteractionProfiles`).
@@ -86,6 +91,8 @@ class OpenXrSession {
         'XR_FB_composition_layer_alpha_blend',
         // The controller profiles that need an extension (Touch Plus).
         ...OpenXrInputBindings.defaults.extensions,
+        // Other plugins' (passthrough, ...).
+        ...OpenXrExtensionRequests.all,
       ]);
       if (r.isFailure) return r;
       if (backend is OpenXrNativeBackend) {
@@ -138,6 +145,9 @@ class OpenXrSession {
         if (event == null) break;
         handled.add(event);
         if (event is OpenXrInteractionProfileChanged) onInteractionProfileChanged?.call();
+        for (final listener in List.of(eventListeners)) {
+          listener(event);
+        }
         for (final action in machine.onEvent(event)) {
           _perform(action);
         }

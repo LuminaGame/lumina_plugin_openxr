@@ -164,13 +164,8 @@ int32_t present(void*, uint32_t) {
     layer.space = loop.space;
     layer.viewCount = viewCount;
     layer.views = views;
-    const XrCompositionLayerBaseHeader* layers[] = {reinterpret_cast<XrCompositionLayerBaseHeader*>(&layer)};
-    XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
-    end.displayTime = displayTime;
-    end.environmentBlendMode = loop.blendMode;
-    end.layerCount = (viewsValid && viewCount == 2 && loop.space != XR_NULL_HANDLE) ? 1 : 0;
-    end.layers = layers;
-    r = fn<PFN_xrEndFrame>("xrEndFrame")(s.session, &end);
+    const bool project = viewsValid && viewCount == 2 && loop.space != XR_NULL_HANDLE;
+    r = endFrameWithLayers(displayTime, project ? &layer : nullptr);
     if (XR_FAILED(r)) fail(r, "xrEndFrame");
     loop.frameBegun.store(false);
     {

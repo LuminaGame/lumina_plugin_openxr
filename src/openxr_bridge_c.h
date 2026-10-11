@@ -123,6 +123,11 @@ typedef struct openxr_bridge_event {
     /// Kind 3: the XrReferenceSpaceType that changes; kind 6: the new rate (Hz).
     float value;
     int32_t space_type;
+    /// The event's XrStructureType (every kind), and for kind 0 the first 64
+    /// bits after its `next` pointer (for example XrEventDataPassthroughStateChangedFB::flags),
+    /// so another plugin can decode its extension's events.
+    int32_t structure_type;
+    uint64_t payload;
 } openxr_bridge_event;
 
 /// xrPollEvent: 1 and [out] filled when an event was waiting, 0 when none,
@@ -269,6 +274,27 @@ FFI_PLUGIN_EXPORT int32_t openxr_bridge_stop_haptic(int64_t action, int32_t hand
 /// xrGetCurrentInteractionProfile for [hand]: writes the profile path
 /// ("" when none is active) into [out]; returns the XrResult.
 FFI_PLUGIN_EXPORT int32_t openxr_bridge_current_interaction_profile(int32_t hand, char* out, uint32_t capacity);
+
+// ---------------------------------------------------------------------------
+// Extension points for other plugins (passthrough and other composition layers).
+
+/// The loader's xrGetInstanceProcAddr, so another plugin's native code calls
+/// extension functions on the same instance. Null before the loader is loaded.
+FFI_PLUGIN_EXPORT void* openxr_bridge_get_instance_proc_addr(void);
+/// The XrInstance and XrSession handles (0 when there is none).
+FFI_PLUGIN_EXPORT uint64_t openxr_bridge_instance_handle(void);
+FFI_PLUGIN_EXPORT uint64_t openxr_bridge_session_handle(void);
+
+/// The composition layers submitted with every frame from now on:
+/// [before] under the projection layer, [after] over it (each an
+/// XrCompositionLayerBaseHeader* that stays valid until replaced), and the
+/// projection layer's XrCompositionLayerFlags (for example
+/// BLEND_TEXTURE_SOURCE_ALPHA | UNPREMULTIPLIED_ALPHA over a passthrough
+/// underlay). Frames without a rendered image submit [before] and [after] only.
+FFI_PLUGIN_EXPORT void openxr_bridge_set_frame_layers(const void* const* before, uint32_t before_count,
+        const void* const* after, uint32_t after_count, uint64_t projection_flags);
+/// The XrEnvironmentBlendMode of xrEndFrame from now on (1 opaque, 2 additive, 3 alpha blend).
+FFI_PLUGIN_EXPORT void openxr_bridge_set_environment_blend_mode(int32_t mode);
 
 #ifdef __cplusplus
 }

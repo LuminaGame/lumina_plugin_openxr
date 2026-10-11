@@ -2,6 +2,7 @@ import 'package:vector_math/vector_math_64.dart' as vm;
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
 import 'package:lumina_plugin_openxr/src/components/lumina_xr_hand.dart';
 import 'package:lumina_plugin_openxr/src/ffi/openxr_types.dart';
+import 'package:lumina_plugin_openxr/src/frame/openxr_composition.dart';
 import 'package:lumina_plugin_openxr/src/input/openxr_input_backend.dart';
 import 'package:lumina_plugin_openxr/src/input/openxr_input_bindings.dart';
 import 'package:lumina_plugin_openxr/src/session/openxr_runtime_event.dart';
@@ -76,6 +77,17 @@ class SimulatedOpenXrBackend implements OpenXrBackend, OpenXrInputBackend {
   /// Every haptic pulse applied, in order (tests read them).
   final List<({LuminaXRHand hand, double amplitude, int durationNs, double frequency})> hapticPulses = [];
 
+  /// Every frame composition the frame loop handed over (layers, projection
+  /// flags, blend mode), in order; the last one is what frames end with.
+  final List<OpenXrFrameComposition> compositions = [];
+
+  /// The layers frames end with now (`projection` for the game's own layer).
+  List<String> get submittedLayers =>
+      compositions.isEmpty ? const ['projection'] : compositions.last.layerNames;
+
+  /// Instance extensions the simulator offers (none by default; tests add them).
+  final Set<String> offeredExtensions = {};
+
   /// Every `syncInput` display time, in order.
   final List<int> inputSyncTimes = [];
 
@@ -115,7 +127,7 @@ class SimulatedOpenXrBackend implements OpenXrBackend, OpenXrInputBackend {
       initialize();
 
   @override
-  bool extensionEnabled(String extension) => false;
+  bool extensionEnabled(String extension) => offeredExtensions.contains(extension);
 
   @override
   OpenXrRuntimeEvent? pollEvent() => _events.isEmpty ? null : _events.removeAt(0);

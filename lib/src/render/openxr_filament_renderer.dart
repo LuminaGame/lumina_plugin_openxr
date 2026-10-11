@@ -4,6 +4,7 @@ import 'package:flutter_filament/filament.dart';
 import 'package:logging/logging.dart';
 
 import 'package:lumina_plugin_openxr/src/backend/openxr_backend.dart';
+import 'package:lumina_plugin_openxr/src/frame/openxr_composition.dart';
 import 'package:lumina_plugin_openxr/src/backend/openxr_native_backend.dart';
 import 'package:lumina_plugin_openxr/src/frame/openxr_frame_loop.dart';
 import 'package:lumina_plugin_openxr/src/render/openxr_eye_camera.dart';
@@ -22,7 +23,7 @@ const _preferredFormats = [43 /* R8G8B8A8_SRGB */, 50 /* B8G8R8A8_SRGB */, 37 /*
 /// multiview pass into a 2-layer image. The pacer hands each frame over
 /// ([renderFrame]); Filament's driver thread begins and ends the OpenXR frame
 /// around its acquire and present.
-class OpenXrFilamentRenderer implements OpenXrEyeRenderer {
+class OpenXrFilamentRenderer implements OpenXrEyeRenderer, OpenXrTransparencyAware {
   OpenXrFilamentRenderer._(this.backend, this.engine, this.swapChain, this.renderer, this.scene, this.view,
       this.cameraEntity, this.camera, this.width, this.height, this.unitsPerMetre);
 
@@ -126,6 +127,32 @@ class OpenXrFilamentRenderer implements OpenXrEyeRenderer {
 
   /// Whether both eyes render in one multiview pass.
   bool get multiview => view.isStereoActive(engine);
+
+  List<double> _clearColor = const [0, 0, 0, 1];
+  bool _transparent = false;
+
+  /// The background colour (linear RGBA) while nothing shows through.
+  void setClearColor(double r, double g, double b, [double a = 1]) {
+    _clearColor = [r, g, b, a];
+    _applyClear();
+  }
+
+  /// Clear to alpha 0 with a translucent view, so a layer under the
+  /// projection layer (a passthrough underlay) shows where nothing is drawn.
+  @override
+  set transparentBackground(bool value) {
+    if (_transparent == value) return;
+    _transparent = value;
+    view.blendMode = value ? BlendMode.translucent : BlendMode.opaque;
+    _applyClear();
+  }
+
+  bool get transparentBackground => _transparent;
+
+  void _applyClear() {
+    final c = _transparent ? const [0.0, 0.0, 0.0, 0.0] : _clearColor;
+    renderer.setClearOptions(r: c[0], g: c[1], b: c[2], a: c[3]);
+  }
 
   /// Frames rendered and skipped so far.
   int get frames => _frames;

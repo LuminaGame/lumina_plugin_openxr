@@ -443,6 +443,20 @@ the same way into any swapchain (the desktop smoke uses flutter_filament's `Exte
 (`--dart-define=XR_REFRESH_RATE=90` asks for another rate). On a Quest 3S it runs at 72 Hz with about 0.25 ms of
 Dart CPU and 0.7 ms of GPU per frame.
 
+## Extension points for other plugins
+
+The openxr plugin knows no vendor extension; another plugin (MetaXR passthrough) adds to the session and the frames:
+
+- `OpenXrExtensionRequests.add('XR_FB_passthrough')` before the session starts: the instance asks for it when the
+  runtime offers it.
+- `OpenXrLayerContributor` in `OpenXrFrameLoop.layerContributors`: asked every frame for layers before / after the
+  projection layer (`OpenXrCompositionLayer`: a name and the address of its `XrCompositionLayer*` struct), the
+  projection layer's flags (`OpenXrCompositionLayerFlags`), an environment blend mode and whether the game clears to
+  alpha 0 (`OpenXrFilamentRenderer` is `OpenXrTransparencyAware`). The bridge submits them with every `xrEndFrame`
+  (`openxr_bridge_set_frame_layers`, `openxr_bridge_set_environment_blend_mode`).
+- `OpenXrNativeBackend.instanceProcAddr` / `instanceHandle` / `sessionHandle` for the other plugin's native code;
+  `OpenXrSession.eventListeners` get every event, extension events as `OpenXrOtherEvent(structureType, payload)`.
+
 ## Coordinate systems and units
 
 | | Units | Axes |
@@ -528,7 +542,7 @@ plugin with its real process (set `LUMINA_OPENXR_DIR` when it is not `../openxr`
 - No PC runtime was available while the native path was built; the desktop bridge compiles and finds a runtime the
   same way, but has only run on the Quest.
 
-Planned next: passthrough (metaxr), hand tracking.
+Planned next: hand tracking.
 
 ## Contributing
 

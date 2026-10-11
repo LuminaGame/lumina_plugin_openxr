@@ -447,6 +447,19 @@ kullanır). `example/` bir başlık için ayağa kaldırma uygulamasıdır: dön
 istatistikleri (`--dart-define=XR_REFRESH_RATE=90` başka bir hız ister). Quest 3S'te kare başına yaklaşık 0,25 ms Dart
 CPU ve 0,7 ms GPU ile 72 Hz'de çalışır.
 
+## Diğer eklentiler için genişletme noktaları
+
+openxr eklentisi hiçbir üretici uzantısını bilmez; başka bir eklenti (MetaXR passthrough) oturuma ve karelere ekler:
+
+- Oturum başlamadan önce `OpenXrExtensionRequests.add('XR_FB_passthrough')`: çalışma zamanı sunuyorsa instance onu ister.
+- `OpenXrFrameLoop.layerContributors` içindeki `OpenXrLayerContributor`: her karede projeksiyon katmanının öncesi /
+  sonrası için katmanlar (`OpenXrCompositionLayer`: bir ad ve `XrCompositionLayer*` yapısının adresi), projeksiyon
+  katmanının bayrakları (`OpenXrCompositionLayerFlags`), bir ortam karışım modu ve oyunun alfa 0 ile temizleyip
+  temizlemeyeceği sorulur (`OpenXrFilamentRenderer` bir `OpenXrTransparencyAware`'dir). Köprü bunları her `xrEndFrame`
+  ile gönderir (`openxr_bridge_set_frame_layers`, `openxr_bridge_set_environment_blend_mode`).
+- Diğer eklentinin yerel kodu için `OpenXrNativeBackend.instanceProcAddr` / `instanceHandle` / `sessionHandle`;
+  `OpenXrSession.eventListeners` her olayı alır, uzantı olaylarını `OpenXrOtherEvent(structureType, payload)` olarak.
+
 ## Koordinat sistemleri ve birimler
 
 | | Birim | Eksenler |
@@ -531,7 +544,7 @@ olarak çalıştırır (`../openxr` değilse `LUMINA_OPENXR_DIR`'i ayarlayın).
 - Yerel yol geliştirilirken bir PC çalışma zamanı yoktu; masaüstü köprüsü derleniyor ve bir çalışma zamanını aynı
   şekilde buluyor, ancak yalnızca Quest üzerinde çalıştı.
 
-Sıradakiler: passthrough (metaxr), el izleme.
+Sıradakiler: el izleme.
 
 ## Katkı
 

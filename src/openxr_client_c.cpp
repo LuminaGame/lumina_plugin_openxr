@@ -337,10 +337,15 @@ int32_t openxr_bridge_poll_event(openxr_bridge_event* out) {
             log("XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB %.1f Hz", e->toDisplayRefreshRate);
             break;
         }
-        default:
+        default: {
             out->kind = 0;
+            uint64_t payload = 0;
+            memcpy(&payload, buffer.varying, sizeof(payload));
+            out->payload = payload;
             break;
+        }
     }
+    out->structure_type = static_cast<int32_t>(buffer.type);
     return 1;
 }
 
