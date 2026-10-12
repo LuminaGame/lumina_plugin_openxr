@@ -15,33 +15,33 @@ dependencies:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina_editor_api
-      ref: 87ca08bec43927031cb16a4297336d4d96389e35
+      ref: dee5ec3fc86c4147bc34bcdae3543df7f826379d
   lumina_plugin_process:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina_plugin_process
-      ref: 87ca08bec43927031cb16a4297336d4d96389e35
+      ref: dee5ec3fc86c4147bc34bcdae3543df7f826379d
   lumina:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina
-      ref: 87ca08bec43927031cb16a4297336d4d96389e35
+      ref: dee5ec3fc86c4147bc34bcdae3543df7f826379d
   # The game host an immersive game presents through (runtime module).
   lumina_widgets:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina_widgets
-      ref: 87ca08bec43927031cb16a4297336d4d96389e35
+      ref: dee5ec3fc86c4147bc34bcdae3543df7f826379d
   flutter_filament:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: flutter_filament
-      ref: 87ca08bec43927031cb16a4297336d4d96389e35
+      ref: dee5ec3fc86c4147bc34bcdae3543df7f826379d
   lumina_core:
     git:
       url: https://github.com/LuminaGame/lumina.git
       path: lumina_core
-      ref: 87ca08bec43927031cb16a4297336d4d96389e35
+      ref: dee5ec3fc86c4147bc34bcdae3543df7f826379d
   ffi: ^2.1.2
   vector_math: ^2.1.4
   meta: ^1.15.0
@@ -61,7 +61,7 @@ dev_dependencies:
     git:
       url: https://github.com/LuminaGame/tools.git
       path: lumina_smoke
-      ref: 06c83844da1339424b17bc5d220092818786f565
+      ref: 7ee320876caab2a0cbf6b556362c8c5fc6703a8c
 
 hooks:
   user_defines:
